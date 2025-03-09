@@ -1,0 +1,1 @@
+cmake -DPYTHON_INCLUDE_DIR=/data/ssd/whlin23/miniconda3/envs/xyz/include/python3.9 -DPYTHON_LIBRARY=/data/ssd/whlin23/miniconda3/envs/xyz/lib/libpython3.9.so -DCMAKE_BUILD_TYPE=debug ..

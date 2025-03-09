@@ -1,0 +1,38 @@
+
+# vscode
+.vscode/
+.git_bk
+
+# build
+build/
+bin/
+cmake/
+
+# dataset
+data/
+data_*/
+benchmarks/*.txt
+*.sh
+*.txt
+*.out
+*.log
+
+# result
+results/
+output/
+script_outputs/
+log
+run
+
+# thirdparty
+thirdparty/
+
+# verify
+verify/
+
+result*
+cml.txt
+output/*
+place
+README_tmp.md
+tmp.zip

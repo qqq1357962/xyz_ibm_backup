@@ -1,0 +1,67 @@
+#!/bin/bash
+input_file="$1"
+output_file="$2"
+
+dir_path=$(dirname "$output_file")
+if [ ! -d "$dir_path" ]; then
+  mkdir -p "$dir_path"
+  echo "already exist: $dir_path"
+else
+  echo "not exist: $dir_path"
+fi
+
+num_instances_line=$(grep -w "NumInstances" "$input_file")
+num_instances=$(echo "$num_instances_line" | awk '{print $2}')
+
+num_instances="${num_instances//[$'\t\r\n ']}"
+echo "num instances:" $num_instances
+
+if [ $# -ge 3 ]; then
+    num_threads="$3"
+else
+    num_threads=8
+fi
+
+if [ -f "./lib_path" ]; then
+    lib_path=$(cat ./lib_path)
+else
+    lib_path="./thirdparty/other"
+fi
+
+chmod +x ./place
+origin_ld_path=$(echo $LD_LIBRARY_PATH)
+if [ ${#origin_ld_path} -gt 0 ]; then
+    export LD_LIBRARY_PATH="$(pwd)/${lib_path}:${LD_LIBRARY_PATH}"
+else
+    export LD_LIBRARY_PATH="$(pwd)/${lib_path}"
+fi
+
+echo "now LD_LIBRARY_PATH: ${LD_LIBRARY_PATH}"
+
+if [ ! -d "output" ]; then
+    mkdir output
+fi
+
+if [ "$num_instances" -lt 300 ]; then
+    echo "case1"
+    ./place "$input_file" "$output_file" --num_bin_x 10 --num_bin_y 10 --fp false --gp false --version 23 --dp false 
+elif   [ "$num_instances" -lt 50000 ]; then
+    echo "case2"
+    # ./place "$input_file" "$output_file" --version 23 --num_threads ${num_threads} --gpu 0 --partitioner gp3d --num_bin_x 512 --num_bin_y 512 --num_bin_z 10 --dp true --lg true --pp false --draw_placement true --num_den_layer 3 --force_coeff_2d 0 --round_recursion 1 --omni_int 1 --eval_params 0 --inner_iter 900 --use_pre_gp 1 --stack_cells 1 --num_bin_3d 53 --cut_net_thres 12 --net_weight_coef 1 --net_weight_offset -0.01 --stop_overflow_3d 0.11 --quad_penalty 1 --wa_coeff 2 --density_weight 16e-5 --density_weight_coef 1.05 --magic_hpwl 35000 --sideline 0 --fp true --local_density_weight true --is_fp_permit_change_cross_chip true --num_part 1 --kernel_size 1 --skip_gp3d false --min_gp3d_record_step 50 --inner_iter_gp3d 900
+    ./place "$input_file" "$output_file" --version 23 --num_threads ${num_threads} --gpu 0 --partitioner gp3d --num_bin_x 512 --num_bin_y 512 --num_bin_z 10 --dp true --lg true --pp false --draw_placement false --num_den_layer 3 --force_coeff_2d 0 --round_recursion 1 --omni_int 1 --eval_params 0 --inner_iter 1200 --use_pre_gp 1 --stack_cells 1 --num_bin_3d 53 --cut_net_thres 12 --net_weight_coef 1 --net_weight_offset -0.01 --stop_overflow_3d 0.11 --quad_penalty 1 --wa_coeff 2 --density_weight 16e-5 --density_weight_coef 1.05 --magic_hpwl 70000 --sideline 0 --fp true --local_density_weight false --is_fp_permit_change_cross_chip true --num_part 1 --kernel_size 1 --skip_gp3d false --skip_hpwl_fm false --min_gp3d_record_step 5 --inner_iter_gp3d 900 --min_gp_step 500 --use_greedy_place_in_fp true
+elif   [ "$num_instances" -lt 250000 ]; then
+    echo "case3"
+    # ./place "$input_file" "$output_file" --version 23 --num_threads ${num_threads} --gpu 0 --partitioner gp3d --num_bin_x 512 --num_bin_y 512 --num_bin_z 10 --dp true --lg true --pp false --draw_placement false --num_den_layer 3 --force_coeff_2d 0 --round_recursion 1 --omni_int 1 --eval_params 0 --inner_iter 1500 --use_pre_gp 1 --stack_cells 1 --num_bin_3d 53 --cut_net_thres 12 --net_weight_coef 1 --net_weight_offset -0.01 --stop_overflow_3d 0.11 --quad_penalty 1 --wa_coeff 2 --density_weight 8e-5 --density_weight_coef 1.05 --magic_hpwl 70000 --sideline 1000 --fp false --min_gp_step 900 --gp_padding 0.07 --shrink_size 1.0 --is_fp_permit_change_cross_chip true --num_part 1 --adjust_macro true 
+    ./place "$input_file" "$output_file" --version 23 --num_threads ${num_threads} --gpu 0 --partitioner gp3d --num_bin_x 512 --num_bin_y 512 --num_bin_z 10 --dp true --lg true --pp false --draw_placement false --num_den_layer 3 --force_coeff_2d 0 --round_recursion 1 --omni_int 1 --eval_params 0 --inner_iter 1500 --use_pre_gp 1 --stack_cells 1 --num_bin_3d 53 --cut_net_thres 12 --net_weight_coef 1 --net_weight_offset -0.01 --stop_overflow_3d 0.11 --quad_penalty 1 --wa_coeff 2 --density_weight 16e-5 --density_weight_coef 1.05 --magic_hpwl 100000 --sideline 200 --fp false --min_gp_step 900 --gp_padding 0.07 --shrink_size 1.0 --is_fp_permit_change_cross_chip true --num_part 1 --adjust_macro true 
+else
+    echo "case4"
+    # ./place "$input_file" "$output_file" --version 23 --num_threads ${num_threads} --gpu 0 --partitioner gp3d --num_bin_x 512 --num_bin_y 1024 --num_bin_z 10 --dp true --lg true --pp false --draw_placement false --num_den_layer 3 --force_coeff_2d 0 --round_recursion 1 --omni_int 1 --eval_params 0 --inner_iter 3500 --use_pre_gp 1 --stack_cells 1 --num_bin_3d 53 --cut_net_thres 12 --net_weight_coef 1 --net_weight_offset -0.01 --stop_overflow_3d 0.07 --quad_penalty 1 --wa_coeff 2 --density_weight 16e-5 --density_weight_coef 1.05 --magic_hpwl 70000 --sideline 1000 --fp false --num_part 1 --kernel_size 1 --inner_iter_gp3d 3000
+    # ./place "$input_file" "$output_file" --version 23 --num_threads ${num_threads} --gpu 0 --partitioner gp3d --num_bin_x 512 --num_bin_y 1024 --num_bin_z 10 --dp true --lg true --pp false --draw_placement false --num_den_layer 3 --force_coeff_2d 0 --round_recursion 1 --omni_int 1 --eval_params 0 --inner_iter 3500 --use_pre_gp 1 --stack_cells 1 --num_bin_3d 53 --cut_net_thres 12 --net_weight_coef 1 --net_weight_offset -0.01 --stop_overflow_3d 0.11 --quad_penalty 1 --wa_coeff 2 --density_weight 8e-5 --density_weight_coef 1.05 --magic_hpwl 70000 --sideline 600 --fp false --lr 1 --gp_padding 0.07 --is_move_macro_3d false --is_fp_permit_change_cross_chip true --num_part 1 --min_gp_step 1200 --skip_hpwl_fm false --adjust_macro true --inner_iter_gp3d 3000
+    # ./place "$input_file" "$output_file" --version 23 --num_threads ${num_threads} --gpu 1 --partitioner gp3d --num_bin_x 256 --num_bin_y 512 --num_bin_z 10 --dp true --lg true --pp false --draw_placement false --num_den_layer 3 --force_coeff_2d 0 --round_recursion 1 --omni_int 1 --eval_params 0 --inner_iter 3500 --use_pre_gp 1 --stack_cells 1 --num_bin_3d 53 --cut_net_thres 12 --net_weight_coef 1 --net_weight_offset -0.01 --stop_overflow_3d 0.11 --quad_penalty 1 --wa_coeff 2 --density_weight 8e-5 --density_weight_coef 1.05 --first_magic_hpwl 70000 --magic_hpwl 350000 --sideline 600 --fp false --lr 1 --gp_padding 0.07 --is_move_macro_3d false --is_fp_permit_change_cross_chip true --num_part 1 --min_gp_step 1200 --skip_hpwl_fm false --adjust_macro true --inner_iter_gp3d 3000
+    # ./place "$input_file" "$output_file" --version 23 --num_threads ${num_threads} --gpu 1 --partitioner gp3d --num_bin_x 512 --num_bin_y 1024 --second_num_bin_x 512 --second_num_bin_y 1024 --num_bin_z 10 --dp true --lg true --pp false --draw_placement false --num_den_layer 3 --force_coeff_2d 0 --round_recursion 1 --omni_int 1 --eval_params 0 --inner_iter 3500 --use_pre_gp 1 --stack_cells 1 --num_bin_3d 53 --cut_net_thres 12 --net_weight_coef 1 --net_weight_offset -0.01 --stop_overflow_3d 0.11 --quad_penalty 1 --wa_coeff 2 --density_weight 8e-5 --density_weight_coef 1.05 --first_magic_hpwl 70000 --magic_hpwl 140000 --sideline 600 --fp false --lr 1 --gp_padding 0.07 --is_move_macro_3d false --is_fp_permit_change_cross_chip true --num_part 1 --min_gp_step 1200 --skip_hpwl_fm false --adjust_macro true --inner_iter_gp3d 3000 
+    # ./place "$input_file" "$output_file" --version 23 --num_threads ${num_threads} --gpu 0 --partitioner gp3d --num_bin_x 512 --num_bin_y 1024 --second_num_bin_x 512 --second_num_bin_y 1024 --num_bin_z 10 --dp true --lg true --pp false --draw_placement false --num_den_layer 3 --force_coeff_2d 0 --round_recursion 1 --omni_int 1 --eval_params 0 --inner_iter 3500 --use_pre_gp 1 --stack_cells 1 --num_bin_3d 53 --cut_net_thres 12 --net_weight_coef 1 --net_weight_offset -0.01 --stop_overflow_3d 0.11 --quad_penalty 1 --wa_coeff 2 --density_weight 8e-5 --density_weight_coef 1.05 --first_magic_hpwl 70000 --magic_hpwl 140000 --sideline 600 --fp false --lr 1 --gp_padding 0.07 --is_move_macro_3d false --is_fp_permit_change_cross_chip true --num_part 1 --min_gp_step 1200 --skip_hpwl_fm false --adjust_macro true --inner_iter_gp3d 3000 
+    # ./place "$input_file" "$output_file" --version 23 --num_threads ${num_threads} --gpu 1 --partitioner gp3d --num_bin_x 512 --num_bin_y 1024 --second_num_bin_x 512 --second_num_bin_y 1024 --num_bin_z 10 --dp true --lg true --pp false --draw_placement false --num_den_layer 3 --force_coeff_2d 0 --round_recursion 1 --omni_int 1 --eval_params 0 --inner_iter 3500 --use_pre_gp 1 --stack_cells 1 --num_bin_3d 53 --cut_net_thres 12 --net_weight_coef 1 --net_weight_offset -0.01 --stop_overflow_3d 0.11 --quad_penalty 1 --wa_coeff 2 --density_weight 8e-5 --density_weight_coef 1.05 --first_magic_hpwl 70000 --magic_hpwl 140000 --sideline 600 --fp false --lr 1 --gp_padding 0.07 --is_move_macro_3d false --is_fp_permit_change_cross_chip true --num_part 1 --min_gp_step 1200 --skip_hpwl_fm false --adjust_macro true --inner_iter_gp3d 3000 
+    # ./place "$input_file" "$output_file" --version 23 --num_threads ${num_threads} --gpu 1 --partitioner gp3d --num_bin_x 512 --num_bin_y 1024 --second_num_bin_x 512 --second_num_bin_y 1024 --num_bin_z 10 --dp true --lg true --pp false --draw_placement false --num_den_layer 3 --force_coeff_2d 0 --round_recursion 1 --omni_int 1 --eval_params 0 --inner_iter 3500 --use_pre_gp 1 --stack_cells 1 --num_bin_3d 53 --cut_net_thres 12 --net_weight_coef 1 --net_weight_offset -0.01 --stop_overflow_3d 0.11 --quad_penalty 1 --wa_coeff 2 --density_weight 8e-5 --density_weight_coef 1.05 --first_magic_hpwl 35000 --magic_hpwl 140000 --sideline 600 --fp false --lr 1 --gp_padding 0.07 --is_move_macro_3d false --is_fp_permit_change_cross_chip true --num_part 1 --min_gp_step 1200 --skip_hpwl_fm false --adjust_macro true --inner_iter_gp3d 3000 
+    # ./place "$input_file" "$output_file" --version 23 --num_threads ${num_threads} --gpu 1 --partitioner gp3d --num_bin_x 512 --num_bin_y 1024 --second_num_bin_x 512 --second_num_bin_y 1024 --num_bin_z 10 --dp true --lg true --pp false --draw_placement false --num_den_layer 3 --force_coeff_2d 0 --round_recursion 1 --omni_int 1 --eval_params 0 --inner_iter 3500 --use_pre_gp 1 --stack_cells 1 --num_bin_3d 53 --cut_net_thres 12 --net_weight_coef 1 --net_weight_offset -0.01 --stop_overflow_3d 0.11 --quad_penalty 1 --wa_coeff 2 --density_weight 8e-5 --density_weight_coef 1.05 --first_magic_hpwl 35000 --magic_hpwl 140000 --sideline 600 --fp false --lr 1 --gp_padding 0.07 --is_move_macro_3d false --is_fp_permit_change_cross_chip true --num_part 1 --min_gp_step 1200 --skip_hpwl_fm false --adjust_macro true --inner_iter_gp3d 3000 
+    ./place "$input_file" "$output_file" --version 23 --num_threads ${num_threads} --gpu 1 --partitioner gp3d --num_bin_x 512 --num_bin_y 1024 --second_num_bin_x 512 --second_num_bin_y 1024 --num_bin_z 10 --dp true --lg true --pp false --draw_placement false --num_den_layer 3 --force_coeff_2d 0 --round_recursion 1 --omni_int 1 --eval_params 0 --inner_iter 3500 --use_pre_gp 1 --stack_cells 1 --num_bin_3d 53 --cut_net_thres 12 --net_weight_coef 1 --net_weight_offset -0.01 --stop_overflow_3d 0.11 --quad_penalty 1 --wa_coeff 2 --density_weight 8e-5 --density_weight_coef 1.05 --first_magic_hpwl 35000 --magic_hpwl 140000 --sideline 600 --fp false --lr 1 --gp_padding 0.07 --is_move_macro_3d false --is_fp_permit_change_cross_chip true --num_part 1 --min_gp_step 1200 --skip_hpwl_fm false --adjust_macro true --inner_iter_gp3d 3000 
+fi
