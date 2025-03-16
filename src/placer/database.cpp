@@ -46,6 +46,7 @@ NodeData::NodeData(Dict& design_info, torch::Device device_) {
 
     /* die info */
     die_info = get<torch::Tensor>(design_info["core_info"]);
+    cout << die_info << endl;
     core_info = get<torch::Tensor>(design_info["core_info"]);  // FIXME: only used in iccad2022 contest
     rowHeights = get<torch::Tensor>(design_info["rowHeights"]);
     numRows = get<torch::Tensor>(design_info["numRows"]);
@@ -88,6 +89,8 @@ NodeData::NodeData(Dict& design_info, torch::Device device_) {
     auto [mov_lhs, mov_rhs] = movable_index;
     cell_mov_lhs = mov_lhs;
     cell_mov_rhs = mov_rhs;
+    iopin_mov_lhs = std::get<0>(node_type_indices[3]);
+    iopin_mov_rhs = std::get<1>(node_type_indices[3]);
     for(int i=0;i<mov_rhs;i++)
     {
         if(macro_mask[i].item<int>()==1)

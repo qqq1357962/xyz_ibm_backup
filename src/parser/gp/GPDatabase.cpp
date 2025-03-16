@@ -677,10 +677,10 @@ torch::Tensor GPDatabase::getPinRelCPosTensor() {
     auto pin_rel_cpos_a = pin_rel_cpos.accessor<coord_type, 2>();
     for (auto& pin : pins) {
         auto& node = nodes[pin.getParNodeId()];
-        if (pin.getId() == 12963) {
-            cout << pin.getRelLx() << " " << pin.getWidth() << endl;
-            cout << pin.getRelLy() << " " << pin.getHeight() << endl;
-        }
+        // if (pin.getId() == 12963) {
+        //     cout << pin.getRelLx() << " " << pin.getWidth() << " " << node.getWidth() << endl;
+        //     cout << pin.getRelLy() << " " << pin.getHeight() << " " << node.getHeight() << endl;
+        // }
         pin_rel_cpos_a[pin.getId()][0] = pin.getRelLx() + pin.getWidth() / 2 - node.getWidth() / 2;
         pin_rel_cpos_a[pin.getId()][1] = pin.getRelLy() + pin.getHeight() / 2 - node.getHeight() / 2;
     }

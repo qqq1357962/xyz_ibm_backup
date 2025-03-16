@@ -57,6 +57,7 @@ tuple<at::Tensor, at::Tensor, at::Tensor> NodeData::get_mov_node_info() {
         expand_ratio = __mov_node_area__ / clamp_mov_node_area;
         mov_node_size = clamp_mov_node_size;
     }
+    mov_node_pos.index({Slice(iopin_mov_lhs, iopin_mov_rhs), Slice(0, 2)}) = node_pos.index({Slice(iopin_mov_lhs, iopin_mov_rhs), Slice(0, 2)});
     return make_tuple(mov_node_pos, mov_node_size, expand_ratio);
 }  // END MODULE
 

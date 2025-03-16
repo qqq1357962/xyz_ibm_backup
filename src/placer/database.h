@@ -159,6 +159,8 @@ public:
 
     int cell_mov_lhs;
     int cell_mov_rhs;
+    int iopin_mov_lhs;
+    int iopin_mov_rhs;
     vector<int> macro_list;
     vector<float> macro_shape_ratio;
     vector<vector<int> > macro_neighbors;

@@ -181,12 +181,12 @@ torch::Tensor Partitioner::run_gp3d(NodeData& data_2d) {
         logger.info("Net weight updated, avg weight: %.4f", data.net_weight.mean().item<float>());
     }
 
-    if (!data_2d.node_wgt_grad.numel() && (st::setting.use_pre_gp || node_pos_2d_ground.numel())) {
-        int min_cell_mov_rhs = min(node_pos_2d_ground.size(0), mov_node_pos.size(0));
-        logger.info("load from prev sol of size %d...", min_cell_mov_rhs);
-        mov_node_pos.index({Slice(0, min_cell_mov_rhs), Slice(0, 2)})
-            .data()
-            .copy_(node_pos_2d_ground.index({Slice(0, min_cell_mov_rhs), Slice(0, 2)}).data());
+    // if (!data_2d.node_wgt_grad.numel() && (st::setting.use_pre_gp || node_pos_2d_ground.numel())) {
+    //     int min_cell_mov_rhs = min(node_pos_2d_ground.size(0), mov_node_pos.size(0));
+    //     logger.info("load from prev sol of size %d...", min_cell_mov_rhs);
+    //     mov_node_pos.index({Slice(0, min_cell_mov_rhs), Slice(0, 2)})
+    //         .data()
+    //         .copy_(node_pos_2d_ground.index({Slice(0, min_cell_mov_rhs), Slice(0, 2)}).data());
 
         // if (node_pos_2d_ground.size(1) == 3) {
         //     logger.info("load from prev sol[2] ...");
@@ -203,7 +203,7 @@ torch::Tensor Partitioner::run_gp3d(NodeData& data_2d) {
         //         }
         //     }
         // }
-    }
+    // }
 
     // int min_cell_mov_rhs = min(node_pos_2d_ground.size(0), mov_node_pos.size(0));
     // mov_node_pos.index({Slice(0, min_cell_mov_rhs), Slice(0, 1)}) = data.__ori_die_hx__ / 2;
@@ -301,13 +301,18 @@ torch::Tensor Partitioner::run_gp3d(NodeData& data_2d) {
     /* parameteer scheduler */
     // ps.density_weight_map = torch::ones_like(init_density_map); // TODO:
     ps.min_stop_iter = st::setting.min_stop_iter;
+    float step_ovfl = 1;
 
     /* objective function */
     torch::Tensor conn_fix_node_pos = data.node_pos.new_empty({0, 3});
-    if (get<0>(data.fixed_connected_index) < get<1>(data.fixed_connected_index)) {
-        auto [lhs, rhs] = data.fixed_connected_index;
-        conn_fix_node_pos = data.node_pos.index({Slice(lhs, rhs), "..."});
-    }
+    // torch::Tensor init_fix_node_pos = data.node_pos.index({Slice(data.iopin_mov_lhs, data.iopin_mov_rhs), "..."}).clone();
+    // init_fix_node_pos.select(1, 0).fill_((data.__ori_die_lx__ + data.__ori_die_hx__) / 2);
+    // init_fix_node_pos.select(1, 1).fill_((data.__ori_die_ly__ + data.__ori_die_hy__) / 2);
+    // if (data.iopin_mov_lhs < data.iopin_mov_rhs) {
+    //     auto lhs = data.iopin_mov_lhs;
+    //     auto rhs = data.iopin_mov_rhs;
+    //     conn_fix_node_pos = data.node_pos.index({Slice(lhs, rhs), "..."}) * min((1 - step_ovfl) * 2, static_cast<float>(1)) + init_fix_node_pos * max(1 - (1 - step_ovfl) * 2, static_cast<float>(0));
+    // }
     conn_fix_node_pos = conn_fix_node_pos.detach();
     auto mov_node_size_top = data_2d.node_size_top.to(data.device);
     auto mov_node_size_bot = data_2d.node_size_bot.to(data.device);
@@ -344,6 +349,7 @@ torch::Tensor Partitioner::run_gp3d(NodeData& data_2d) {
             }
             if (true) {
                 grad.index({torch::indexing::Slice(data.cell_mov_rhs, data.cell_mov_rhs + data.__num_fillers__), torch::indexing::Slice(2, 3)}) = 0.0;
+                grad.index({torch::indexing::Slice(data.iopin_mov_lhs, data.iopin_mov_rhs), torch::indexing::Slice(0, 2)}) = 0.0;
             }
             // for (auto macro_id : macro_list) {
             //     grad[macro_id][2] = 0;
@@ -480,6 +486,9 @@ torch::Tensor Partitioner::run_gp3d(NodeData& data_2d) {
     for (iteration = 1; iteration < st::setting.inner_iter_gp3d && init_lr > 0 && !st::setting.skip_gp3d; iteration++) {
         // for (iteration = 1; iteration < 0 && init_lr > 0; iteration++) {
         torch::Tensor obj = optimizer.step();
+        // conn_fix_node_pos = data.node_pos.index({Slice(data.iopin_mov_lhs, data.iopin_mov_rhs), "..."}) * min((1 - step_ovfl) * 1.5, static_cast<double>(1)) + init_fix_node_pos * max(1 - (1 - step_ovfl) * 1.5, static_cast<double>(0));
+        // cout << conn_fix_node_pos[0][1] << endl;
+        // conn_fix_node_pos = conn_fix_node_pos.detach();
         // auto mov_node_area = torch::prod(mov_node_size.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs)}), 1) * expand_ratio.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs)});
         // auto mask_bot = mov_node_pos.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs)}).select(1, 2) < mid_z;
         // auto mask_top = mov_node_pos.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs)}).select(1, 2) >= mid_z;
@@ -494,11 +503,7 @@ torch::Tensor Partitioner::run_gp3d(NodeData& data_2d) {
         // float step_wl = hpwl.index({"...", 2}).sum().item<float>();
         float step_wl = hpwl.sum().item<float>();
         float step_wl_xy = hpwl.slice(1,0,2).sum().item<float>();
-        float step_ovfl = overflows.mean().item<float>();
-        // if(step_ovfl < 0.2)
-        // {
-        //     GP3D::wa_wirelength_hpwl::force_remove_overlap(data_2d.macro_list, mov_node_pos, mov_rhs, mov_node_size);
-        // }
+        step_ovfl = overflows.mean().item<float>();
 
         if (!ps.local_density_lock && st::setting.local_density_weight && step_ovfl < 0.2) {
             logger.info("Global density below threshold, start applying local density");

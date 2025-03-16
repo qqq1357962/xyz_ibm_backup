@@ -23,7 +23,7 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> fast_evaluator(
     ParamScheduler& ps,
     PlaceData& data) {
     auto [mov_lhs, mov_rhs] = data.movable_index;
-
+    // mov_rhs = data.iopin_mov_lhs;
     mov_node_pos = constraint_fn(mov_node_pos);
 
     auto [overflow, density_map] =
