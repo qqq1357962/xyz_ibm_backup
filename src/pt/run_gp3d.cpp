@@ -305,14 +305,14 @@ torch::Tensor Partitioner::run_gp3d(NodeData& data_2d) {
 
     /* objective function */
     torch::Tensor conn_fix_node_pos = data.node_pos.new_empty({0, 3});
-    // torch::Tensor init_fix_node_pos = data.node_pos.index({Slice(data.iopin_mov_lhs, data.iopin_mov_rhs), "..."}).clone();
-    // init_fix_node_pos.select(1, 0).fill_((data.__ori_die_lx__ + data.__ori_die_hx__) / 2);
-    // init_fix_node_pos.select(1, 1).fill_((data.__ori_die_ly__ + data.__ori_die_hy__) / 2);
-    // if (data.iopin_mov_lhs < data.iopin_mov_rhs) {
-    //     auto lhs = data.iopin_mov_lhs;
-    //     auto rhs = data.iopin_mov_rhs;
-    //     conn_fix_node_pos = data.node_pos.index({Slice(lhs, rhs), "..."}) * min((1 - step_ovfl) * 2, static_cast<float>(1)) + init_fix_node_pos * max(1 - (1 - step_ovfl) * 2, static_cast<float>(0));
-    // }
+    torch::Tensor init_fix_node_pos = data.node_pos.index({Slice(data.iopin_mov_lhs, data.iopin_mov_rhs), "..."}).clone();
+    init_fix_node_pos.select(1, 0).fill_((data.__ori_die_lx__ + data.__ori_die_hx__) / 2);
+    init_fix_node_pos.select(1, 1).fill_((data.__ori_die_ly__ + data.__ori_die_hy__) / 2);
+    if (data.iopin_mov_lhs < data.iopin_mov_rhs) {
+        auto lhs = data.iopin_mov_lhs;
+        auto rhs = data.iopin_mov_rhs;
+        conn_fix_node_pos = data.node_pos.index({Slice(lhs, rhs), "..."}) * min((1 - step_ovfl) * 2, static_cast<float>(1)) + init_fix_node_pos * max(1 - (1 - step_ovfl) * 2, static_cast<float>(0));
+    }
     conn_fix_node_pos = conn_fix_node_pos.detach();
     auto mov_node_size_top = data_2d.node_size_top.to(data.device);
     auto mov_node_size_bot = data_2d.node_size_bot.to(data.device);
@@ -378,7 +378,7 @@ torch::Tensor Partitioner::run_gp3d(NodeData& data_2d) {
     GP3D::init_params(mov_node_pos,
                       trunc_node_pos_fn,
                       mov_lhs,
-                      mov_rhs,
+                      data.iopin_mov_lhs,
                       conn_fix_node_pos,
                       density_map_layers,
                       mov_node_size,
@@ -486,9 +486,9 @@ torch::Tensor Partitioner::run_gp3d(NodeData& data_2d) {
     for (iteration = 1; iteration < st::setting.inner_iter_gp3d && init_lr > 0 && !st::setting.skip_gp3d; iteration++) {
         // for (iteration = 1; iteration < 0 && init_lr > 0; iteration++) {
         torch::Tensor obj = optimizer.step();
-        // conn_fix_node_pos = data.node_pos.index({Slice(data.iopin_mov_lhs, data.iopin_mov_rhs), "..."}) * min((1 - step_ovfl) * 1.5, static_cast<double>(1)) + init_fix_node_pos * max(1 - (1 - step_ovfl) * 1.5, static_cast<double>(0));
+        conn_fix_node_pos = data.node_pos.index({Slice(data.iopin_mov_lhs, data.iopin_mov_rhs), "..."}) * min((1 - step_ovfl) * 1.5, static_cast<double>(1)) + init_fix_node_pos * max(1 - (1 - step_ovfl) * 1.5, static_cast<double>(0));
         // cout << conn_fix_node_pos[0][1] << endl;
-        // conn_fix_node_pos = conn_fix_node_pos.detach();
+        conn_fix_node_pos = conn_fix_node_pos.detach();
         // auto mov_node_area = torch::prod(mov_node_size.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs)}), 1) * expand_ratio.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs)});
         // auto mask_bot = mov_node_pos.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs)}).select(1, 2) < mid_z;
         // auto mask_top = mov_node_pos.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs)}).select(1, 2) >= mid_z;

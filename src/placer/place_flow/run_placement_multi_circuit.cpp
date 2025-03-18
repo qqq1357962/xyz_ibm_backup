@@ -63,8 +63,9 @@ void run_placement_main_multi_circuit() {
 
     //     }
     // }
-
+    cout << data.node_pos[98113] << endl;
     data.preprocess();
+    cout << data.node_pos[98113] << endl;
     torch::Tensor node_die;
     torch::Tensor node_pos;
     torch::Tensor node_size;
@@ -167,6 +168,7 @@ void run_placement_main_multi_circuit() {
                 }
                 else{
                     node_pos = pt.run_gp2d_grid(data);
+                    cout << data.node_pos[98113] << endl;
                     // pt.run_patoh_grided(data, node_pos);
                     data.node_die = torch::ones(data.num_nodes, torch::dtype(torch::kInt));
                     // via_data = ViaData(data, rawdb, data.node_die);
@@ -184,7 +186,8 @@ void run_placement_main_multi_circuit() {
                 }
                 // data.node_size = data_size_backup0;
                 pt.node_pos_2d_ground = node_pos;
-                data.node_pos = node_pos;
+                cout << data.mov_node_sideline_ll[98113] << endl;
+                // data.node_pos = node_pos;
             }
             if (st::setting.force_coeff_2d == 1) st::setting.use_filler_3d = true;
             // pt.run_patoh(data);
@@ -240,6 +243,7 @@ void run_placement_main_multi_circuit() {
                 logger.info("%d nodes changed their die id, total %d, ratio %f", diff_num, data.cell_mov_rhs, float(diff_num)/float(data.cell_mov_rhs));
             }
             data.node_pos = node_pos;
+            cout << data.mov_node_sideline_ll[98113] << endl;
 
             via_data = ViaData(data, rawdb, data.node_die);
             auto node_size555 = data.node_size_bot * (1 - node_die).unsqueeze(1) + data.node_size_top * node_die.unsqueeze(1);

@@ -183,6 +183,7 @@ torch::Tensor Partitioner::run_gp2d_grid(NodeData &data) {
         }
 
         node_pos = mov_node_pos.index({Slice(mov_lhs, mov_rhs)}).to(torch::kCPU);
+        cout << node_pos[98113] << endl;
 
         if (false) {
             mov_node_size.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs)}) *= 1;

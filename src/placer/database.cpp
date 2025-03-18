@@ -46,7 +46,6 @@ NodeData::NodeData(Dict& design_info, torch::Device device_) {
 
     /* die info */
     die_info = get<torch::Tensor>(design_info["core_info"]);
-    cout << die_info << endl;
     core_info = get<torch::Tensor>(design_info["core_info"]);  // FIXME: only used in iccad2022 contest
     rowHeights = get<torch::Tensor>(design_info["rowHeights"]);
     numRows = get<torch::Tensor>(design_info["numRows"]);
@@ -55,6 +54,7 @@ NodeData::NodeData(Dict& design_info, torch::Device device_) {
     /* node/pin info */  // FIXME: see below
     node_pos = get<torch::Tensor>(design_info["node_pos"]);
     //node_rotate = get<torch::Tensor>(design_info["node_rotate"]);
+    cout << node_pos[98113] << endl;
 
     /* hyperlist info */
     pin_id2node_id = get<torch::Tensor>(design_info["pin_id2node_id"]);

@@ -43,7 +43,7 @@ tuple<torch::Tensor, torch::Tensor> calc_obj_and_grad(torch::Tensor mov_node_pos
                                                       NodeData3D& data) {
     // we disable merged_forward_backward in C++ version since it is quite complicated
     auto [mov_lhs, mov_rhs] = data.movable_index;
-
+    mov_rhs = data.iopin_mov_lhs;
     mov_node_pos = constraint_fn(mov_node_pos);
 
     auto conn_node_pos = mov_node_pos.index({Slice({mov_lhs, mov_rhs})});

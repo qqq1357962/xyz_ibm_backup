@@ -406,7 +406,7 @@ std::vector<int> calc_limited_direction_distance(DetailedPlaceData& db, std::vec
 }
 
 
-bool macroLegalization(DetailedPlaceData& db, int num_bins_x, int num_bins_y) {
+bool macroLegalization(NodeData& data, DetailedPlaceData& db, int num_bins_x, int num_bins_y) {
     // LegalizationData db(at_db);
     // db.set_num_bins(num_bins_x, num_bins_y);
 
@@ -454,7 +454,7 @@ bool macroLegalization(DetailedPlaceData& db, int num_bins_x, int num_bins_y) {
     std::vector<int> fixed_macros;
     fixed_macros.reserve(db.num_nodes - db.num_movable_nodes);
     for (int i = db.num_movable_nodes; i < db.num_nodes; ++i) {
-        if(db.node_weight[i]==0)
+        if(db.node_weight[i]==0 || (i >= data.iopin_mov_lhs && i < data.iopin_mov_rhs))
         {
             continue;
         }

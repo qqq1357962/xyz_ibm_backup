@@ -65,7 +65,7 @@ void legalizationV2(NodeData& data,
     
     int count = 0;
     while(!legal) {
-        legal = macroLegalization(dp_db, num_bins_x, num_bins_y);
+        legal = macroLegalization(data, dp_db, num_bins_x, num_bins_y);
         count++;
         if(count >= 5) {
             exit(0);

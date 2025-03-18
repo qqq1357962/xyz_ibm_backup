@@ -9,16 +9,19 @@ tuple<at::Tensor, at::Tensor, at::Tensor> NodeData::get_mov_node_info() {
 
     /* core ll/ur offset */
     at::Tensor single_sideline_ll = die_ll - 1e-4;
-    at::Tensor single_sideline_ur = die_ur + die_ll - 1e-4;
+    at::Tensor single_sideline_ur = die_ur - die_ll - 1e-4;
 
     // xl0 yl0 xl1 yl1
     torch::Tensor single_sideline_space_ll = torch::tensor({(float)st::setting.sideline, 
                                                         (float)st::setting.sideline}, dtype(torch::kFloat));
     torch::Tensor single_sideline_space_ur = torch::tensor({(float)st::setting.sideline, 
                                                         (float)st::setting.sideline}, dtype(torch::kFloat));
-
-    mov_node_sideline_ll = single_sideline_ll.repeat({num_nodes + __num_fillers__, 1});
-    mov_node_sideline_ur = single_sideline_ur.repeat({num_nodes + __num_fillers__, 1});
+    
+    int num_ios = iopin_mov_rhs - iopin_mov_lhs;
+    torch::Tensor single_sideline_ll_io = (-__die_shift__ / __die_scale__);
+    torch::Tensor single_sideline_ur_io = single_sideline_ur * 2;
+    mov_node_sideline_ll = torch::cat({single_sideline_ll.repeat({num_nodes - num_ios, 1}), single_sideline_ll_io.repeat({num_ios, 1}), single_sideline_ll.repeat({__num_fillers__, 1})}, 0);
+    mov_node_sideline_ur = torch::cat({single_sideline_ur.repeat({num_nodes - num_ios, 1}), single_sideline_ur_io.repeat({num_ios, 1}), single_sideline_ur.repeat({__num_fillers__, 1})}, 0);
     mov_node_sideline_ll += single_sideline_space_ll;
     mov_node_sideline_ur -= single_sideline_space_ur;
     // mov_node_sideline_ll = torch::cat({mov_node_sideline_ll, 
@@ -110,7 +113,7 @@ tuple<at::Tensor, at::Tensor, at::Tensor> NodeData::get_mov_node_info_cross_chip
 
     /* core ll/ur offset */
     at::Tensor single_sideline_ll = die_ll - 1e-4;
-    at::Tensor single_sideline_ur = die_ur + die_ll - 1e-4;
+    at::Tensor single_sideline_ur = die_ur - die_ll - 1e-4;
 
     // // xl0 yl0 xl1 yl1 case4
     // torch::Tensor single_sideline_space_ll = torch::tensor({(float)500.0, (float)0.0, (float)500.0, (float)0.0}, dtype(torch::kFloat)).reshape({2, 2});
@@ -124,13 +127,12 @@ tuple<at::Tensor, at::Tensor, at::Tensor> NodeData::get_mov_node_info_cross_chip
     
     // torch::Tensor single_sideline_space_ll = torch::tensor({(float)st::setting.sideline, (float)0.0, (float)st::setting.sideline, (float)0.0}, dtype(torch::kFloat)).reshape({2, 2});
     torch::Tensor single_sideline_space_ll = torch::tensor({(float)st::setting.sideline, (float)st::setting.sideline, (float)st::setting.sideline, (float)st::setting.sideline}, dtype(torch::kFloat)).reshape({2, 2});
-    torch::Tensor single_sideline_space_ur = torch::tensor({(float)st::setting.sideline, (float)st::setting.sideline + (die_ur[1] - numRows[0] * rowHeights[0] - 1e-4).item<float>(), 
-                                                    (float)st::setting.sideline, (float)st::setting.sideline + (die_ur[1] - numRows[1] * rowHeights[1] - 1e-4).item<float>()}, dtype(torch::kFloat)).reshape({2, 2});
+    torch::Tensor single_sideline_space_ur = torch::tensor({(float)st::setting.sideline, (float)st::setting.sideline, (float)st::setting.sideline, (float)st::setting.sideline}, dtype(torch::kFloat)).reshape({2, 2});
     
     int checkSideline1 = (die_ur[1] - numRows[0] * rowHeights[0]).item<int>();
     int checkSideline2 = (die_ur[1] - numRows[1] * rowHeights[1]).item<int>();
-    mov_node_sideline_ll = single_sideline_ll.repeat({num_nodes, 1});
-    mov_node_sideline_ur = single_sideline_ur.repeat({num_nodes, 1});
+    mov_node_sideline_ll = mov_node_sideline_ll.index({Slice(cell_mov_lhs, cell_mov_rhs)});
+    mov_node_sideline_ur = mov_node_sideline_ur.index({Slice(cell_mov_lhs, cell_mov_rhs)});
     if(!move_macro)
     {
         mov_node_sideline_ll += single_sideline_space_ll.index_select(0, mov_node_die)*(1-macro_mask).unsqueeze(1); // FIXME:

@@ -147,7 +147,7 @@ DetailedPlaceData::DetailedPlaceData(NodeData& data, DetailedPlaceDataTensor& at
 
     num_threads = std::max(st::setting.num_threads, 1);
     num_nodes = at_db.node_pos_init.size(0);  // FIXME: #nodes = cell+via #node
-    num_movable_nodes = data.num_nodes;       // FIXME: #mov_nodes = cell #node
+    num_movable_nodes = data.iopin_mov_lhs;       // FIXME: #mov_nodes = cell #node
     num_nets = data.num_nets;
     num_pins = data.num_pins;
 

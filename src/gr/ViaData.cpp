@@ -7,6 +7,8 @@ ViaData::ViaData(NodeData& data_, shared_ptr<db::Database> rawdb_, torch::Tensor
     // num_nodes = cell_pos_.size(0);
     cell_mov_lhs = data.cell_mov_lhs;
     cell_mov_rhs = data.cell_mov_rhs;
+    iopin_mov_lhs = data.iopin_mov_lhs;
+    iopin_mov_rhs = data.iopin_mov_rhs;
     bondingInfo = data.bondingInfo;
     num_nodes = data.num_nodes;
     num_nets = data.hyperedge_list_end.size(0);
@@ -460,7 +462,7 @@ void ViaData::dump(
     }
 
     /* place rawdb */
-    for (int i = 0; i != num_nodes; i++) {
+    for (int i = 0; i < iopin_mov_lhs; i++) {
         cell_node_pos[i][0].data().copy_(round((cell_node_pos[i][0] - node_size[i][0] / 2).item<float>()) +
                                          node_size[i][0] / 2);
         cell_node_pos[i][1].data().copy_(round((cell_node_pos[i][1] - node_size[i][1] / 2).item<float>()) +
@@ -469,6 +471,12 @@ void ViaData::dump(
                                round((cell_node_pos[i][1] - node_size[i][1] / 2).item<float>()),
                                node_die[i].item<int>(), node_orient[i].item<int>());
     }
+    cell_node_pos[98113][0].data().copy_(round((cell_node_pos[98113][0] - node_size[98113][0] / 2).item<float>()) +
+                                         node_size[98113][0] / 2);
+    cell_node_pos[98113][1].data().copy_(round((cell_node_pos[98113][1] - node_size[98113][1] / 2).item<float>()) +
+                                         node_size[98113][1] / 2);
+    
+    cout << cell_node_pos[98113] << endl;
 
     auto node_pos_dump = torch::cat({cell_node_pos, via_node_pos}, 0);
     node_pos.data().copy_(node_pos_dump.data());

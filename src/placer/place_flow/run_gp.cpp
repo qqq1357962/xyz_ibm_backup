@@ -541,13 +541,12 @@ torch::Tensor run_gp(NodeData& data,
     // {
     //     mov_node_size_all[macro_id]=0;
     // }
-    int iter_time = 0;
-    auto [hpwl_now, overflows_now, tmp_now] = evaluator_fn(mov_node_pos_all);
-    if (overflows_now[2].item<float>() > st::setting.stop_overflow_via) {
-        iter_time = st::setting.inner_iter;
-    } else {
-        logger.info("overflows are good enough, no need gp");
-    }
+    int iter_time = st::setting.inner_iter;
+    // auto [hpwl_now, overflows_now, tmp_now] = evaluator_fn(mov_node_pos_all);
+    // if (overflows_now[2].item<float>() < st::setting.stop_overflow_via) {
+    //     iter_time = 0;
+    //     logger.info("overflows are good enough, no need gp");
+    // }
     
     for (iteration = 0; iteration < iter_time; iteration++) {
         // for (iteration = 0; iteration < 2000; iteration++) {

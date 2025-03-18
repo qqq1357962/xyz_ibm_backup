@@ -32,6 +32,6 @@ struct Blank {
     }
 };
 */
-bool macroLegalization(DetailedPlaceData& db, int num_bins_x, int num_bins_y);
+bool macroLegalization(NodeData& data, DetailedPlaceData& db, int num_bins_x, int num_bins_y);
 
 }  // namespace dp

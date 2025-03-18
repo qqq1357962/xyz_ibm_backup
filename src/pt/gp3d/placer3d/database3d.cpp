@@ -97,7 +97,8 @@ NodeData3D::NodeData3D(NodeData& data) {
     // auto node_size_z = torch::mean(node_size) * torch::ones({num_nodes, 1}, torch::dtype(node_size.dtype()));
 
     node_size = torch::cat({node_size, node_size_z}, 1);
-    node_pos = torch::cat({node_pos, torch::randn_like(node_size_z)}, 1);
+    // node_pos = torch::cat({node_pos, torch::randn_like(node_size_z)}, 1);
+    node_pos = torch::cat({node_pos, (torch::rand({node_size_z.sizes()}).round() + 0.5) / 2 * __ori_die_hz__}, 1);
     auto pin_rel_cpos_z = torch::zeros({num_pins, 1}, torch::dtype(pin_rel_cpos.dtype()));
     pin_rel_cpos = torch::cat({pin_rel_cpos, pin_rel_cpos_z}, 1);
     pin_rel_cpos_top = torch::cat({pin_rel_cpos_top, pin_rel_cpos_z}, 1);
@@ -307,19 +308,14 @@ void NodeData3D::compute_filler() {
 
     at::Tensor single_sideline_ll = die_ll - 1e-4;
     at::Tensor single_sideline_ur = die_ur - die_ll - 1e-4;
-    at::Tensor single_sideline_ll_io = torch::zeros(single_sideline_ll.sizes(), single_sideline_ll.dtype());
+    at::Tensor single_sideline_ll_io = (-__die_shift__ / __die_scale__);
     at::Tensor single_sideline_ur_io = single_sideline_ur * 2;
 
     sidelines_ll = single_sideline_ll.repeat({num_nodes, 1});
     sidelines_ur = single_sideline_ur.repeat({num_nodes, 1});
-    cout << num_nodes << endl;
-    cout << single_sideline_ll << endl;
-    cout << single_sideline_ur << endl;
 
     sidelines_ll = torch::cat({sidelines_ll.index({Slice(0, iopin_mov_lhs)}), single_sideline_ll_io.repeat({iopin_mov_rhs - iopin_mov_lhs, 1})}, 0);
     sidelines_ur = torch::cat({sidelines_ur.index({Slice(0, iopin_mov_lhs)}), single_sideline_ur_io.repeat({iopin_mov_rhs - iopin_mov_lhs, 1})}, 0);
-    cout << sidelines_ll.sizes() << endl;
-    cout << sidelines_ur.sizes() << endl;
 
 
     __num_fillers__ = 0;
@@ -352,7 +348,7 @@ void NodeData3D::compute_filler() {
         num_fillers_single =
             torch::round(total_filler_area / (filler_size_x * filler_size_y * filler_size_z)).item<int>();
         
-        num_fillers_single *= 0.90;
+        num_fillers_single *= 0.95;
         
         num_fillers_single_chip = num_fillers_single;
 
@@ -605,7 +601,7 @@ tuple<at::Tensor, at::Tensor, at::Tensor> NodeData3D::get_mov_node_info() {
     mov_node_weights[0] = mov_node_weight;
     mov_node_weights[1] = 1 - mov_node_weight;
     node_die = torch::ones({mov_node_pos.size(0)}, dtype(torch::kInt));
-    mov_node_pos.index({Slice(iopin_mov_lhs, iopin_mov_rhs), Slice(0, 2)}).copy_(node_pos.index({Slice(iopin_mov_lhs, iopin_mov_rhs), Slice(0, 2)}));
+    mov_node_pos.index({Slice(iopin_mov_lhs, iopin_mov_rhs)}).copy_(node_pos.index({Slice(iopin_mov_lhs, iopin_mov_rhs)}));
     mov_node_pos = mov_node_pos.detach();
 
     return make_tuple(mov_node_pos, mov_node_size, expand_ratio);
