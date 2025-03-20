@@ -486,7 +486,7 @@ torch::Tensor Partitioner::run_gp3d(NodeData& data_2d) {
     for (iteration = 1; iteration < st::setting.inner_iter_gp3d && init_lr > 0 && !st::setting.skip_gp3d; iteration++) {
         // for (iteration = 1; iteration < 0 && init_lr > 0; iteration++) {
         torch::Tensor obj = optimizer.step();
-        conn_fix_node_pos = data.node_pos.index({Slice(data.iopin_mov_lhs, data.iopin_mov_rhs), "..."}) * min((1 - step_ovfl) * 1.5, static_cast<double>(1)) + init_fix_node_pos * max(1 - (1 - step_ovfl) * 1.5, static_cast<double>(0));
+        conn_fix_node_pos = data.node_pos.index({Slice(data.iopin_mov_lhs, data.iopin_mov_rhs), "..."}) * min((1 - step_ovfl) * 1.4, static_cast<double>(1)) + init_fix_node_pos * max(1 - (1 - step_ovfl) * 1.5, static_cast<double>(0));
         // cout << conn_fix_node_pos[0][1] << endl;
         conn_fix_node_pos = conn_fix_node_pos.detach();
         // auto mov_node_area = torch::prod(mov_node_size.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs)}), 1) * expand_ratio.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs)});

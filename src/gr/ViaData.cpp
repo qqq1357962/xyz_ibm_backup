@@ -471,12 +471,12 @@ void ViaData::dump(
                                round((cell_node_pos[i][1] - node_size[i][1] / 2).item<float>()),
                                node_die[i].item<int>(), node_orient[i].item<int>());
     }
-    cell_node_pos[98113][0].data().copy_(round((cell_node_pos[98113][0] - node_size[98113][0] / 2).item<float>()) +
-                                         node_size[98113][0] / 2);
-    cell_node_pos[98113][1].data().copy_(round((cell_node_pos[98113][1] - node_size[98113][1] / 2).item<float>()) +
-                                         node_size[98113][1] / 2);
+    // cell_node_pos[98113][0].data().copy_(round((cell_node_pos[98113][0] - node_size[98113][0] / 2).item<float>()) +
+    //                                      node_size[98113][0] / 2);
+    // cell_node_pos[98113][1].data().copy_(round((cell_node_pos[98113][1] - node_size[98113][1] / 2).item<float>()) +
+    //                                      node_size[98113][1] / 2);
     
-    cout << cell_node_pos[98113] << endl;
+    // cout << cell_node_pos[98113] << endl;
 
     auto node_pos_dump = torch::cat({cell_node_pos, via_node_pos}, 0);
     node_pos.data().copy_(node_pos_dump.data());
