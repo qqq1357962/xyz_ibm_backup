@@ -46,6 +46,7 @@ NodeData::NodeData(Dict& design_info, torch::Device device_) {
 
     /* die info */
     die_info = get<torch::Tensor>(design_info["core_info"]);
+    die_info_back_up = get<torch::Tensor>(design_info["die_info"]);
     core_info = get<torch::Tensor>(design_info["core_info"]);  // FIXME: only used in iccad2022 contest
     rowHeights = get<torch::Tensor>(design_info["rowHeights"]);
     numRows = get<torch::Tensor>(design_info["numRows"]);
@@ -476,49 +477,49 @@ void NodeData::setMacroOrient() {
     // auto node_size_a = node_size.accessor<float, 2>();
     // auto node_size_top_a = node_size_top.accessor<float, 2>();
     // auto node_size_bot_a = node_size_bot.accessor<float, 2>();
-    auto new_orient = node_orient_top.clone();
+    auto new_orient = torch::randint(0, 2, node_orient_top.sizes()) * macro_mask * 2;
 
-    std::unordered_map<int, int> type_occurance;
+    // std::unordered_map<int, int> type_occurance;
 
-    for(int i = 0 ;i < num_nodes; i++) {
-        if (macro_mask[i].item<int>() == 1) {
-            int macro_dim = node_size[i][0].item().toInt() >= node_size[i][1].item().toInt() ? 0 : 1;
-            if(core_dim != macro_dim) {
-                new_orient[i]=1;
-                // node_orient_top[i] = 1;
-                // node_orient_bot[i] = 1;
-                // float tmp_float = node_size_top_a[i][1];
-                // node_size_top_a[i][1] = node_size_top_a[i][0];
-                // node_size_top_a[i][0] = tmp_float;
+    // for(int i = 0 ;i < num_nodes; i++) {
+    //     if (macro_mask[i].item<int>() == 1) {
+    //         int macro_dim = node_size[i][0].item().toInt() >= node_size[i][1].item().toInt() ? 0 : 1;
+    //         if(core_dim != macro_dim) {
+    //             new_orient[i]=1;
+    //             // node_orient_top[i] = 1;
+    //             // node_orient_bot[i] = 1;
+    //             // float tmp_float = node_size_top_a[i][1];
+    //             // node_size_top_a[i][1] = node_size_top_a[i][0];
+    //             // node_size_top_a[i][0] = tmp_float;
 
-                // tmp_float = node_size_bot_a[i][1];
-                // node_size_bot_a[i][1] = node_size_bot_a[i][0];
-                // node_size_bot_a[i][0] = tmp_float;
+    //             // tmp_float = node_size_bot_a[i][1];
+    //             // node_size_bot_a[i][1] = node_size_bot_a[i][0];
+    //             // node_size_bot_a[i][0] = tmp_float;
 
             
-                // tmp_float = node_size_a[i][1];
-                // node_size_a[i][1] = node_size_a[i][0];
-                // node_size_a[i][0] = tmp_float;
-            }
+    //             // tmp_float = node_size_a[i][1];
+    //             // node_size_a[i][1] = node_size_a[i][0];
+    //             // node_size_a[i][0] = tmp_float;
+    //         }
             
-            int node_celltypeID = node_type[i].item<int>();
-            if(type_occurance.find(node_celltypeID) != type_occurance.end()) {
-                if(type_occurance[node_celltypeID] %2 == 1) {
-                    // std::cout << i << " " << node_orient_top[i].item<int>() << "\n";
-                    // std::cout << i << " " << new_orient[i].item<int>() << "\n";
-                    // node_orient_top_a[i] += 2;
-                    // node_orient_bot_a[i] += 2;
-                    new_orient[i] += 2;
-                    // std::cout << i << " " << node_orient_top[i].item<int>() << "\n";
-                    // std::cout << i << " " << new_orient[i].item<int>() << "\n";
-                }
-                type_occurance[node_celltypeID] = type_occurance[node_celltypeID] + 1;
-            } else {
-                type_occurance[node_celltypeID] = 1;
-            }
+    //         int node_celltypeID = node_type[i].item<int>();
+    //         if(type_occurance.find(node_celltypeID) != type_occurance.end()) {
+    //             if(type_occurance[node_celltypeID] %2 == 1) {
+    //                 // std::cout << i << " " << node_orient_top[i].item<int>() << "\n";
+    //                 // std::cout << i << " " << new_orient[i].item<int>() << "\n";
+    //                 // node_orient_top_a[i] += 2;
+    //                 // node_orient_bot_a[i] += 2;
+    //                 new_orient[i] += 2;
+    //                 // std::cout << i << " " << node_orient_top[i].item<int>() << "\n";
+    //                 // std::cout << i << " " << new_orient[i].item<int>() << "\n";
+    //             }
+    //             type_occurance[node_celltypeID] = type_occurance[node_celltypeID] + 1;
+    //         } else {
+    //             type_occurance[node_celltypeID] = 1;
+    //         }
             
-        }
-    }
+    //     }
+    // }
     update_macro_orientation(new_orient);
     // auto pin_rel_cpos_a = pin_rel_cpos.accessor<float, 2>();
     // auto pin_rel_cpos_top_a = pin_rel_cpos_top.accessor<float, 2>();
@@ -614,6 +615,7 @@ void NodeData::prescale_by_site_width() {
     logger.info("design scaled by /%d", site_width);
     // inplace scaling
     die_info /= site_width;
+    die_info_back_up /= site_width;
     core_info /= site_width;
     rowHeights /= site_width;
     region_boxes /= site_width;
@@ -639,6 +641,7 @@ void NodeData::postscale_by_site_width() {
     // inplace scaling
     logger.info("design scaled by %d", site_width);
     die_info *= site_width;
+    die_info_back_up *= site_width;
     core_info *= site_width;
     rowHeights *= site_width;
     region_boxes *= site_width;

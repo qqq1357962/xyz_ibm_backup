@@ -18,6 +18,7 @@ NodeData3D::NodeData3D(NodeData& data) {
 
     /* copy form data */
     die_info = data.die_info.clone();  // TODO: ori_die_info / die_info
+    die_info_back_up = data.die_info_back_up.clone();
     core_info = data.core_info.clone();
     node_size = data.node_size.clone();
     node_pos = data.node_pos.clone();

@@ -15,5 +15,7 @@ bool DrawGlobalPlacement(
     double width,
     double height,
     const std::vector<std::string>& draw_contents,
+    int iopin_mov_lhs,
+    int iopin_mov_rhs,
     bool debug_mode=false,
     std::vector<std::pair<int,int> > poses_vis={});

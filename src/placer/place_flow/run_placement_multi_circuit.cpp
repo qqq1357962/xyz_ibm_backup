@@ -39,7 +39,7 @@ void run_placement_main_multi_circuit() {
     auto [design_info, rawdb, gpdb] = load_dataset();
     NodeData data(design_info, device);
     auto macro_mask_2d = data.macro_mask.clone().unsqueeze(1);
-    // data.setMacroOrient();
+    data.setMacroOrient();
     // grad.slice(0, 0, macro_mask_2d.size(0)) *= (1-0.99*macro_mask_2d);
     // for(int i=0;i<data.pin_rel_cpos.size(0);i++)
     // {
@@ -959,10 +959,13 @@ void run_placement_main_multi_circuit() {
 
         /* draw cells */
         if (true) {
+            auto true_node_pos_dp = node_pos_dp.index({Slice(cell_mov_lhs, cell_mov_rhs)});
+            auto node_shift = (data.__die_shift__.index({Slice(0, 2)}) / data.__die_scale__.index({Slice(0, 2)})).expand_as(true_node_pos_dp);
+            true_node_pos_dp = true_node_pos_dp + node_shift;
             auto info1 = make_tuple(st::setting.round_recursion, 0, data.design_name + "_DP_0");
-            draw_fig_with_cairo_cpp(node_pos_dp.index({Slice(cell_mov_lhs, cell_mov_rhs)}), node_size_bot, data, info1);
+            draw_fig_with_cairo_cpp(true_node_pos_dp, node_size_bot, data, info1);
             auto info2 = make_tuple(st::setting.round_recursion, 0, data.design_name + "_DP_1");
-            draw_fig_with_cairo_cpp(node_pos_dp.index({Slice(cell_mov_lhs, cell_mov_rhs)}), node_size_top, data, info2);
+            draw_fig_with_cairo_cpp(true_node_pos_dp, node_size_top, data, info2);
         }
 
         node_pos = node_pos_dp;

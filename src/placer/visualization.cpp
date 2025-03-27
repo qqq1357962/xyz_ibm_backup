@@ -10,7 +10,7 @@ bool draw_fig_with_cairo_cpp(torch::Tensor node_pos,
     {
         return 0;
     }
-    auto _die_info = data.die_info;  // FIXME:
+    auto _die_info = data.die_info_back_up;  // FIXME:
 
     double lx = _die_info[0].item().toDouble();
     double hx = _die_info[1].item().toDouble();
@@ -72,7 +72,9 @@ bool draw_fig_with_cairo_cpp(torch::Tensor node_pos,
                                png_path,
                                width,
                                height,
-                               draw_contents);
+                               draw_contents,
+                               data.iopin_mov_lhs,
+                               data.iopin_mov_rhs);
 }
 
 bool draw_fig_with_cairo_cpp2(torch::Tensor node_pos,
@@ -227,6 +229,8 @@ bool draw_fig_with_cairo_cpp2(torch::Tensor node_pos,
                                width,
                                height,
                                draw_contents,
+                               data.iopin_mov_lhs,
+                               data.iopin_mov_rhs,
                                true,
                                poses_vis);
 }
@@ -388,7 +392,7 @@ void logWireLength(NodeData& data, torch::Tensor node_pos, torch::Tensor node_di
 
 bool draw_fig_with_cairo_cpp_cross_chip(
     torch::Tensor node_pos, torch::Tensor node_size, PlaceData &data, tuple<int, int, string> info, int base_size) {
-    auto _die_info = data.die_info;  // FIXME:
+    auto _die_info = data.die_info_back_up; // FIXME:
 
     double lx = _die_info[0].item().toDouble();
     double hx = _die_info[1].item().toDouble();
@@ -457,7 +461,9 @@ bool draw_fig_with_cairo_cpp_cross_chip(
                                png_path,
                                width,
                                height,
-                               draw_contents);
+                               draw_contents,
+                               data.iopin_mov_lhs,
+                               data.iopin_mov_rhs);
 }
 
 void plot_pt(torch::Tensor data, char *cmd, char *path, char *fig) {

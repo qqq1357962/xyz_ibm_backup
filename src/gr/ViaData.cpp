@@ -30,6 +30,7 @@ ViaData::ViaData(NodeData& data_, shared_ptr<db::Database> rawdb_, torch::Tensor
 
     core_info = data.die_info.clone();
     die_info = data.die_info.clone();
+    die_info_back_up = data.die_info_back_up.clone();
     core_info[0] += data.bondingInfo[2] / 2;  // TODO: safe bound for spacing rule
     core_info[1] -= data.bondingInfo[2] / 2;
     core_info[2] += data.bondingInfo[2] / 2;  // FIXME: used as a shift

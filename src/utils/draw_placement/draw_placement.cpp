@@ -15,6 +15,8 @@ bool DrawGlobalPlacement(
     double width,
     double height,
     const std::vector<std::string>& draw_contents,
+    int iopin_mov_lhs,
+    int iopin_mov_rhs,
     bool debug_mode,
     std::vector<std::pair<int,int> > poses_vis) {
     Drawer drawer(ele_type_to_rgba_vec, filename, width, height, draw_contents);
@@ -27,6 +29,8 @@ bool DrawGlobalPlacement(
                              site_info,
                              bin_size_info,
                              node_types_indices,
+                             iopin_mov_lhs,
+                             iopin_mov_rhs,
                              debug_mode,
                              poses_vis);
     return status;

@@ -27,6 +27,7 @@ public:
 
     /* Die/Core/Site info */
     torch::Tensor die_info;
+    torch::Tensor die_info_back_up;
     torch::Tensor core_info;
     torch::Tensor die_ur;
     torch::Tensor die_ll;

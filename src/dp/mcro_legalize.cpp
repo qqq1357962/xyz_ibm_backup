@@ -387,7 +387,8 @@ std::vector<int> calc_limited_direction_distance(DetailedPlaceData& db, std::vec
         float center_y = (db.yh+db.yl)/2;
         limited[i] = (x-center_x)*(x-center_x)+(y-center_y)*(x-center_y);
     }
-    torch::Tensor limited_tensor = torch::zeros({macros.size()},torch::kFloat32);
+    int macro_num = macros.size();
+    torch::Tensor limited_tensor = torch::zeros({macro_num},torch::kFloat32);
     for(int i=0;i<macros.size();i++)
     {
         limited_tensor[i]=limited[i];

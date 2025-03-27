@@ -400,9 +400,11 @@ torch::Tensor run_gp(NodeData& data,
             ps.wa_coeff);
 
         auto mov_node_size_all_draw = mov_node_size_all.to(torch::kCPU).clone();
+        auto node_shift = (data.__die_shift__.index({Slice(0, 2)}) / data.__die_scale__.index({Slice(0, 2)})).expand_as(mov_node_pos_all).to(torch::kCPU);
+        auto true_mov_node_pos_all = mov_node_pos_all.to(torch::kCPU) + node_shift;
         // mov_node_size_all_draw.index({Slice(mov_lhs, mov_rhs)}) *= 0;
         auto info3 = make_tuple(st::setting.round_recursion, 0, message + data.design_name + "_PT_GP_INIT_2");
-        draw_fig_with_cairo_cpp(mov_node_pos_all.to(torch::kCPU), mov_node_size_all_draw, data, info3);
+        draw_fig_with_cairo_cpp(true_mov_node_pos_all.to(torch::kCPU), mov_node_size_all_draw, data, info3);
     }
     // data.init_shape_params(mov_node_size_all);
     printlog(LOG_WARN, "MEM: cur = %.2f MB, peak = %.2f MB", utils::mem_use::get_current(), utils::mem_use::get_peak());
@@ -582,20 +584,22 @@ torch::Tensor run_gp(NodeData& data,
 
             if (st::setting.draw_placement) {
                 if (false) {
+                    auto node_shift = (data.__die_shift__.index({Slice(0, 2)}) / data.__die_scale__.index({Slice(0, 2)})).expand_as(mov_node_pos_all).to(torch::kCPU);
+                    auto true_mov_node_pos_all = mov_node_pos_all.to(torch::kCPU) + node_shift;
                     auto info1 = make_tuple(st::setting.round_recursion, iteration, data.design_name + "_GP_0");
                     draw_fig_with_cairo_cpp(
-                        mov_node_pos_all.to(torch::kCPU).index({Slice(cell_mov_lhs, cell_mov_rhs), "..."}),
+                        true_mov_node_pos_all.to(torch::kCPU).index({Slice(cell_mov_lhs, cell_mov_rhs), "..."}),
                         node_size_bot, data, info1);
                     auto info2 = make_tuple(st::setting.round_recursion, iteration, data.design_name + "_GP_1");
                     draw_fig_with_cairo_cpp(
-                        mov_node_pos_all.to(torch::kCPU).index({Slice(cell_mov_lhs, cell_mov_rhs), "..."}),
+                        true_mov_node_pos_all.to(torch::kCPU).index({Slice(cell_mov_lhs, cell_mov_rhs), "..."}),
                         node_size_top, data, info2);
                     auto info3 = make_tuple(st::setting.round_recursion, iteration, message + data.design_name + "_GP_2");
                     draw_fig_with_cairo_cpp(
-                        mov_node_pos_all.to(torch::kCPU), mov_node_size_all.to(torch::kCPU), data, info3);
+                        true_mov_node_pos_all.to(torch::kCPU), mov_node_size_all.to(torch::kCPU), data, info3);
                     /* draw vias */
                     auto info = make_tuple(st::setting.round_recursion, iteration, message + data.design_name + "_VIA_GP");
-                    draw_fig_with_cairo_cpp(mov_node_pos_all.to(torch::kCPU).index({Slice(cell_mov_rhs, mov_rhs)}),
+                    draw_fig_with_cairo_cpp(true_mov_node_pos_all.to(torch::kCPU).index({Slice(cell_mov_rhs, mov_rhs)}),
                                             via_mov_node_size,
                                             via_data,
                                             info,
@@ -661,17 +665,21 @@ torch::Tensor run_gp(NodeData& data,
     if (true) {
         /* draw cells */
         mov_node_pos = node_pos.index({Slice(cell_mov_lhs, cell_mov_rhs)}).to(torch::kCPU);
+        auto node_shift = (data.__die_shift__.index({Slice(0, 2)}) / data.__die_scale__.index({Slice(0, 2)})).expand_as(mov_node_pos).to(torch::kCPU);
+        auto true_mov_node_pos = mov_node_pos + node_shift;
         auto info1 = make_tuple(st::setting.round_recursion, 0, message + data.design_name + "_PT_GP_0");
-        draw_fig_with_cairo_cpp(mov_node_pos, node_size_bot, data, info1);
+        draw_fig_with_cairo_cpp(true_mov_node_pos, node_size_bot, data, info1);
         auto info2 = make_tuple(st::setting.round_recursion, 0, message + data.design_name + "_PT_GP_1");
-        draw_fig_with_cairo_cpp(mov_node_pos, node_size_top, data, info2);
+        draw_fig_with_cairo_cpp(true_mov_node_pos, node_size_top, data, info2);
         auto info3 = make_tuple(st::setting.round_recursion, 0, message + data.design_name + "_PT_GP_2");
-        auto node_pos_draw_cp = torch::cat({mov_node_pos, mov_node_pos}, 0);
+        auto node_pos_draw_cp = torch::cat({true_mov_node_pos, true_mov_node_pos}, 0);
         auto node_size_draw_cp = torch::cat({node_size_bot, node_size_top}, 0);
         draw_fig_with_cairo_cpp_cross_chip(node_pos_draw_cp, node_size_draw_cp, data, info3);
     }
     if (st::setting.round_recursion == 0) {
         via_mov_node_pos = node_pos.index({Slice(cell_mov_rhs, mov_rhs)}).to(torch::kCPU);
+        auto node_shift = (data.__die_shift__.index({Slice(0, 2)}) / data.__die_scale__.index({Slice(0, 2)})).expand_as(via_mov_node_pos).to(torch::kCPU);
+        auto true_via_mov_node_pos = via_mov_node_pos + node_shift;
         auto via_node_size = via_data.node_size.clone();
         if (st::setting.round_recursion > 0) {
             via_node_size.index_put_({"...", 0}, data.bondingInfo[0] + data.bondingInfo[2]);
@@ -679,7 +687,7 @@ torch::Tensor run_gp(NodeData& data,
         }
         /* draw vias */
         auto info = make_tuple(st::setting.round_recursion, iteration, message + data.design_name + "_VIA_GP");
-        draw_fig_with_cairo_cpp(via_mov_node_pos, via_node_size, via_data, info, viaColor);
+        draw_fig_with_cairo_cpp(true_via_mov_node_pos, via_node_size, via_data, info, viaColor);
     }
 
     /* save to .pt model */

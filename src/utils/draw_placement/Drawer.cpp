@@ -102,6 +102,8 @@ bool Drawer::run(const std::vector<double>& node_pos_x,   // after die scale
                  const std::tuple<double, double>& site_info,
                  const std::tuple<double, double>& bin_size_info,  // after die scale
                  std::vector<std::tuple<index_type, index_type, std::string>> node_types_indices,
+                 int iopin_mov_lhs,
+                 int iopin_mov_rhs,
                  bool debug_mode,
                  std::vector<std::pair<int,int> > poses_vis) {
     // init cairo
@@ -191,17 +193,21 @@ bool Drawer::run(const std::vector<double>& node_pos_x,   // after die scale
         }
         for (auto [start_idx, end_idx, node_type] : node_types_indices) {
             // std::cout << "drawing " << node_type << std::endl;
+            int enlarge = 1;
             for (index_type i = start_idx; i < end_idx; i++) {
                 if (i >= num_nodes) {
                     break;
                 }
+                if (i >= iopin_mov_lhs && i < iopin_mov_rhs) {
+                    enlarge = 30;
+                }
                 double node_lx = node_pos_x[i] - node_size_x[i] / 2;
                 double node_ly = node_pos_y[i] - node_size_y[i] / 2;
-                cairo_rectangle(c, node_lx, node_ly, node_size_x[i], node_size_y[i]);
+                cairo_rectangle(c, node_lx, node_ly, node_size_x[i] * enlarge, node_size_y[i] * enlarge);
                 set_rgba(node_type);
                 cairo_fill(c);
                 if (draw_node_bd) {
-                    cairo_rectangle(c, node_lx, node_ly, node_size_x[i], node_size_y[i]);
+                    cairo_rectangle(c, node_lx, node_ly, node_size_x[i] * enlarge, node_size_y[i] * enlarge);
                     cairo_set_source_rgb(c, 0.1, 0.1, 0.1);
                     cairo_stroke(c);
                 }

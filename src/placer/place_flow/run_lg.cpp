@@ -116,6 +116,8 @@ torch::Tensor run_lg(NodeData& data, ViaData& via_data, torch::Tensor node_pos, 
     /* draw cells */
     if (!only_macro) {
         auto cell_node_pos_lg = node_pos_lg.index({Slice(cell_mov_lhs, cell_mov_rhs)});
+        auto node_shift = (data.__die_shift__.index({Slice(0, 2)}) / data.__die_scale__.index({Slice(0, 2)})).expand_as(cell_node_pos_lg);
+        cell_node_pos_lg = cell_node_pos_lg + node_shift;
         auto info1 = make_tuple(st::setting.round_recursion, 0, data.design_name + "_LG_0");
         draw_fig_with_cairo_cpp(cell_node_pos_lg, node_size_bot, data, info1);
         auto info2 = make_tuple(st::setting.round_recursion, 0, data.design_name + "_LG_1");

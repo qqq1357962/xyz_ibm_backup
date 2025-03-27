@@ -24,6 +24,8 @@ public:
              const std::tuple<double, double>& site_info,
              const std::tuple<double, double>& bin_size_info,
              std::vector<std::tuple<index_type, index_type, std::string>> node_types_indices,
+             int iopin_mov_lhs,
+             int iopin_mov_rhs,
              bool debug_mode=false,
              std::vector<std::pair<int,int> > poses_vis={});
 };

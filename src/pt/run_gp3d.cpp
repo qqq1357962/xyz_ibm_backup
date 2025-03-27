@@ -431,7 +431,10 @@ torch::Tensor Partitioner::run_gp3d(NodeData& data_2d) {
         // auto nos = 1 - density_map_layers[0].node_die.index({Slice(data.cell_mov_lhs,
         // data.cell_mov_rhs)}).clone().to(torch::kCPU);
 
-        auto node_pos = mov_node_pos.index({Slice(0, data.cell_mov_rhs)}).to(torch::kCPU);
+        auto node_pos = mov_node_pos.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs)}).to(torch::kCPU);
+        auto true_node_pos = mov_node_pos.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs), Slice(0, 2)}).to(torch::kCPU);
+        auto node_shift = (data.__die_shift__.index({Slice(0, 2)}) / data.__die_scale__.index({Slice(0, 2)})).expand_as(true_node_pos).to(torch::kCPU);
+        true_node_pos = true_node_pos + node_shift;
         // data.to(torch::kCPU);
 
         /* dump to partition result */
@@ -453,20 +456,20 @@ torch::Tensor Partitioner::run_gp3d(NodeData& data_2d) {
 
         auto info1 = make_tuple(st::setting.round_recursion, 0, data.design_name + "_init_3D_0");
         draw_fig_with_cairo_cpp(
-            mov_node_pos.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs), Slice(0, 2)}).to(torch::kCPU),
+            true_node_pos.to(torch::kCPU),
             node_size_bot,
             data,
             info1);
         auto info2 = make_tuple(st::setting.round_recursion, 0, data.design_name + "_init_3D_1");
         draw_fig_with_cairo_cpp(
-            mov_node_pos.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs), Slice(0, 2)}).to(torch::kCPU),
+            true_node_pos.to(torch::kCPU),
             node_size_top,
             data,
             info2);
         auto info3 = make_tuple(st::setting.round_recursion, iteration, data.design_name + "_3D_2");
         auto node_pos_draw_cp =
-            torch::cat({mov_node_pos.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs), Slice(0, 2)}),
-                        mov_node_pos.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs), Slice(0, 2)})},
+            torch::cat({true_node_pos,
+                        true_node_pos},
                        0)
                 .to(torch::kCPU);
         auto node_size_draw_cp = torch::cat({node_size_bot, node_size_top}, 0);
@@ -486,7 +489,7 @@ torch::Tensor Partitioner::run_gp3d(NodeData& data_2d) {
     for (iteration = 1; iteration < st::setting.inner_iter_gp3d && init_lr > 0 && !st::setting.skip_gp3d; iteration++) {
         // for (iteration = 1; iteration < 0 && init_lr > 0; iteration++) {
         torch::Tensor obj = optimizer.step();
-        conn_fix_node_pos = data.node_pos.index({Slice(data.iopin_mov_lhs, data.iopin_mov_rhs), "..."}) * min((1 - step_ovfl) * 1.4, static_cast<double>(1)) + init_fix_node_pos * max(1 - (1 - step_ovfl) * 1.5, static_cast<double>(0));
+        conn_fix_node_pos = data.node_pos.index({Slice(data.iopin_mov_lhs, data.iopin_mov_rhs), "..."}) * min((1 - step_ovfl) * 1.4, static_cast<double>(1)) + init_fix_node_pos * max(1 - (1 - step_ovfl) * 1.4, static_cast<double>(0));
         // cout << conn_fix_node_pos[0][1] << endl;
         conn_fix_node_pos = conn_fix_node_pos.detach();
         // auto mov_node_area = torch::prod(mov_node_size.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs)}), 1) * expand_ratio.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs)});
@@ -562,25 +565,28 @@ torch::Tensor Partitioner::run_gp3d(NodeData& data_2d) {
             if (need_stop || st::setting.draw_placement || ps.need_to_early_stop() || data_2d.node_wgt_grad.numel()
                 || iteration == st::setting.inner_iter-1) {
                 if (true) {
+                    auto true_node_pos = mov_node_pos.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs), Slice(0, 2)}).to(torch::kCPU);
+                    auto node_shift = (data.__die_shift__.index({Slice(0, 2)}) / data.__die_scale__.index({Slice(0, 2)})).expand_as(true_node_pos).to(torch::kCPU);
+                    true_node_pos = true_node_pos + node_shift;
                     torch::Tensor node_size_bot = data_2d.node_size_bot * (1 - node_die).unsqueeze(1);
                     torch::Tensor node_size_top = data_2d.node_size_top * node_die.unsqueeze(1);
 
                     auto info1 = make_tuple(st::setting.round_recursion, iteration, data.design_name + "_3D_0");
                     draw_fig_with_cairo_cpp(
-                        mov_node_pos.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs), Slice(0, 2)}).to(torch::kCPU),
+                        true_node_pos.to(torch::kCPU),
                         node_size_bot,
                         data,
                         info1);
                     auto info2 = make_tuple(st::setting.round_recursion, iteration, data.design_name + "_3D_1");
                     draw_fig_with_cairo_cpp(
-                        mov_node_pos.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs), Slice(0, 2)}).to(torch::kCPU),
+                        true_node_pos.to(torch::kCPU),
                         node_size_top,
                         data,
                         info2);
                     auto info3 = make_tuple(st::setting.round_recursion, iteration, data.design_name + "_3D_2");
                     auto node_pos_draw_cp =
-                        torch::cat({mov_node_pos.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs), Slice(0, 2)}),
-                                    mov_node_pos.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs), Slice(0, 2)})},
+                        torch::cat({true_node_pos,
+                                    true_node_pos},
                                    0)
                             .to(torch::kCPU);
                     auto node_size_draw_cp = torch::cat({node_size_bot, node_size_top}, 0);
@@ -626,25 +632,28 @@ torch::Tensor Partitioner::run_gp3d(NodeData& data_2d) {
 
                 // torch::Tensor node_size_bot = data_2d.node_size_bot * (nos).unsqueeze(1);
                 // torch::Tensor node_size_top = data_2d.node_size_top * (1 - nos).unsqueeze(1);
+                auto true_node_pos = mov_node_pos.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs), Slice(0, 2)}).to(torch::kCPU);
+                auto node_shift = (data.__die_shift__.index({Slice(0, 2)}) / data.__die_scale__.index({Slice(0, 2)})).expand_as(true_node_pos).to(torch::kCPU);
+                true_node_pos = true_node_pos + node_shift;
                 torch::Tensor node_size_bot = data_2d.node_size_bot * (1 - node_die).unsqueeze(1);
                 torch::Tensor node_size_top = data_2d.node_size_top * node_die.unsqueeze(1);
 
                 auto info1 = make_tuple(st::setting.round_recursion, iteration, data.design_name + "_3D_0");
                 draw_fig_with_cairo_cpp(
-                    mov_node_pos.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs), Slice(0, 2)}).to(torch::kCPU),
+                    true_node_pos.to(torch::kCPU),
                     node_size_bot,
                     data,
                     info1);
                 auto info2 = make_tuple(st::setting.round_recursion, iteration, data.design_name + "_3D_1");
                 draw_fig_with_cairo_cpp(
-                    mov_node_pos.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs), Slice(0, 2)}).to(torch::kCPU),
+                    true_node_pos.to(torch::kCPU),
                     node_size_top,
                     data,
                     info2);
                 auto info3 = make_tuple(st::setting.round_recursion, iteration, data.design_name + "_3D_2");
                 auto node_pos_draw_cp =
-                    torch::cat({mov_node_pos.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs), Slice(0, 2)}),
-                                mov_node_pos.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs), Slice(0, 2)})},
+                    torch::cat({true_node_pos,
+                                true_node_pos},
                                 0)
                         .to(torch::kCPU);
                 auto node_size_draw_cp = torch::cat({node_size_bot, node_size_top}, 0);
@@ -935,21 +944,29 @@ torch::Tensor Partitioner::run_gp3d(NodeData& data_2d) {
         bot_filler = torch::cat({(1 - node_die), bot_filler});
         top_filler = torch::cat({node_die, top_filler});
 
+        auto true_node_pos = mov_node_pos.index({"...", Slice(0, 2)}).to(torch::kCPU);
+        auto node_shift = (data.__die_shift__.index({Slice(0, 2)}) / data.__die_scale__.index({Slice(0, 2)})).expand_as(true_node_pos).to(torch::kCPU);
+        true_node_pos = true_node_pos + node_shift;
+
         torch::Tensor node_size_bot =
             mov_node_size.index({"...", Slice(0, 2)}).to(torch::kCPU) * bot_filler.unsqueeze(1);
         torch::Tensor node_size_top =
             mov_node_size.index({"...", Slice(0, 2)}).to(torch::kCPU) * top_filler.unsqueeze(1);
 
         auto info1 = make_tuple(st::setting.round_recursion, 0, data.design_name + "_3D_PT_0");
-        draw_fig_with_cairo_cpp(mov_node_pos.index({"...", Slice(0, 2)}).to(torch::kCPU), node_size_bot, data, info1);
+        draw_fig_with_cairo_cpp(true_node_pos, node_size_bot, data, info1);
         auto info2 = make_tuple(st::setting.round_recursion, 0, data.design_name + "_3D_PT_1");
-        draw_fig_with_cairo_cpp(mov_node_pos.index({"...", Slice(0, 2)}).to(torch::kCPU), node_size_top, data, info2);
+        draw_fig_with_cairo_cpp(true_node_pos, node_size_top, data, info2);
         auto info3 = make_tuple(st::setting.round_recursion, 0, data.design_name + "_3D_PT_2");
+
+        true_node_pos = node_pos.index({"...", Slice(0, 2)}).to(torch::kCPU);
+        node_shift = (data.__die_shift__.index({Slice(0, 2)}) / data.__die_scale__.index({Slice(0, 2)})).expand_as(true_node_pos).to(torch::kCPU);
+        true_node_pos = true_node_pos + node_shift;
 
         node_size_bot = data_2d.node_size_bot * (1 - node_die).unsqueeze(1);
         node_size_top = data_2d.node_size_top * node_die.unsqueeze(1);
         auto node_pos_draw_cp =
-            torch::cat({node_pos.index({"...", Slice(0, 2)}), node_pos.index({"...", Slice(0, 2)})}, 0);
+            torch::cat({true_node_pos, true_node_pos}, 0);
         auto node_size_draw_cp = torch::cat({node_size_bot, node_size_top}, 0);
         draw_fig_with_cairo_cpp_cross_chip(node_pos_draw_cp, node_size_draw_cp, data, info3);
     }
