@@ -161,6 +161,8 @@ argparse::ArgumentParser get_option(int argc, char* argv[]) {
     parser.add_argument("--first_magic_hpwl").default_value(int(350000)).help("").scan<'i', int>();
     parser.add_argument("--second_num_bin_x").default_value(int(512)).help("").scan<'i', int>();
     parser.add_argument("--second_num_bin_y").default_value(int(1024)).help("").scan<'i', int>();
+    parser.add_argument("--die_diff").default_value(double(0.10)).help("two die util difference").scan<'g', double>();
+    parser.add_argument("--patoh_guide_ratio").default_value(double(0.00)).help("patoh guide ratio").scan<'g', double>();
 
 
     // others

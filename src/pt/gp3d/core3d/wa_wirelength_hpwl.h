@@ -23,6 +23,7 @@ public:
                                  at::Tensor hpwl_scale,
                                  at::Tensor ratio_difference,
                                  at::Tensor macro_mask,
+                                 at::Tensor node_die_patoh,
                                  at::Tensor die_info = torch::empty({0}),
                                  at::Tensor node_die = torch::empty({0})) {
         // Save data for backward in context
@@ -42,12 +43,10 @@ public:
         auto ratio_difference_area = ratio_difference.prod(1).sqrt();
         ratio = ratio.squeeze(1);
         auto ratio_multiply = (ratio_difference_area - 1) * 0.39;
-        // cout << ratio_difference_area.sizes() << endl;
-        // cout << ratio.sizes() << endl;
         // cout << ratio_multiply.sizes() << endl;
-        // cout << macro_mask.sizes() << endl;
-        // auto selected = ratio_multiply.masked_select(macro_mask.ne(0));
-        // cout << selected << endl;
+        ratio_multiply = (node_die_patoh - (node_die_patoh.max() + node_die_patoh.min()) / 2).to(ratio_difference_area.options());
+        // cout << ratio_multiply << endl;
+        
         wa_wirelength_hpwl::update_rel_cpos(pin_rel_cpos,pin_id2node_id, pin_rel_cpos_difference);
 
         auto net_weight_naive = torch::ones({net_weight.size(0)}, dtype(torch::kFloat)).to(net_weight.device());
@@ -149,6 +148,7 @@ public:
         // node_grad.index({"...", Slice(0, 2)}) *= st::setting.iteration == 0 ? 1 : st::setting.force_coeff_2d;  // FIXME:
 
         return {node_grad * wa_grad_out,
+                Variable(),
                 Variable(),
                 Variable(),
                 Variable(),

@@ -40,7 +40,8 @@ tuple<torch::Tensor, torch::Tensor> calc_obj_and_grad(torch::Tensor mov_node_pos
                                                       vector<ElectronicDensityLayer>& density_map_layers,
                                                       torch::Tensor conn_fix_node_pos,
                                                       ParamScheduler& ps,
-                                                      NodeData3D& data) {
+                                                      NodeData3D& data,
+                                                      torch::Tensor node_die_patoh) {
     // we disable merged_forward_backward in C++ version since it is quite complicated
     auto [mov_lhs, mov_rhs] = data.movable_index;
     mov_rhs = data.iopin_mov_lhs;
@@ -89,6 +90,7 @@ tuple<torch::Tensor, torch::Tensor> calc_obj_and_grad(torch::Tensor mov_node_pos
                                                       data.hpwl_scale,
                                                       density_map_layers[0].ratio_difference,
                                                       data.macro_mask,
+                                                      node_die_patoh,
                                                       data.die_info,
                                                       node_die);
 

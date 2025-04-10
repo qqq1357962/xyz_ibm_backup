@@ -14,7 +14,8 @@ void init_params(torch::Tensor mov_node_pos,
                  torch::Tensor init_density_map,
                  torch::optim::Optimizer& optimizer,
                  ParamScheduler& ps,
-                 NodeData3D& data) {
+                 NodeData3D& data,
+                 torch::Tensor node_die_patoh ) {
     mov_node_pos = trunc_node_pos_fn(mov_node_pos);
     torch::Tensor conn_node_pos = mov_node_pos.index({Slice(mov_lhs, mov_rhs), "..."});
     conn_node_pos = torch::cat({conn_node_pos, conn_fix_node_pos}, 0);
@@ -56,6 +57,7 @@ void init_params(torch::Tensor mov_node_pos,
                                                       data.hpwl_scale,
                                                       density_map_layers[0].ratio_difference,
                                                       data.macro_mask,
+                                                      node_die_patoh,
                                                       data.die_info,
                                                       node_die);
     auto wl_loss = wl_val_list[0];

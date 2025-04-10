@@ -194,6 +194,8 @@ void Setting::parse(argparse::ArgumentParser args) {
     first_magic_hpwl = args.get<int>("--first_magic_hpwl");
     second_num_bin_x = args.get<int>("--second_num_bin_x");
     second_num_bin_y = args.get<int>("--second_num_bin_y");
+    die_diff = args.get<double>("--die_diff");
+    patoh_guide_ratio = args.get<double>("--patoh_guide_ratio");
 
     /* others */
     draw_mat_size = args.get<double>("--draw_mat_size");

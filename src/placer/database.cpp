@@ -190,7 +190,7 @@ NodeData::NodeData(Dict& design_info, torch::Device device_) {
     actualUtilM = maxUtilM.clone();
     actualUtilM[0] = estimated_target_density_bot;
     actualUtilM[1] = estimated_target_density_top;
-    maxUtilM = actualUtilM + 0.05;
+    maxUtilM = actualUtilM * (1 + st::setting.die_diff);
 
     upper_lower_bound_ratio = maxUtilM.clone();
     auto area_upper = (node_ratio * maxUtilM[0]) / (mov_node_areas[0] / die_area - maxUtilM[0]);

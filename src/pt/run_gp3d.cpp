@@ -50,7 +50,7 @@ torch::Tensor Partitioner::run_gp3d(NodeData& data_2d) {
 
     // ======================================================================================================
     //
-    //                                            GP2D
+    //                                            GP3D
     //
     // ======================================================================================================
     /* initialization */
@@ -341,14 +341,15 @@ torch::Tensor Partitioner::run_gp3d(NodeData& data_2d) {
                                                         density_map_layers,
                                                         conn_fix_node_pos,
                                                         ps,
-                                                        data);
+                                                        data,
+                                                        (data_2d.node_die) * st::setting.patoh_guide_ratio);
             if (!st::setting.move_macro_3d) {
                 for (auto macro_id : macro_list) {
                     grad[macro_id] = 0;
                 }
             }
             if (true) {
-                grad.index({torch::indexing::Slice(data.cell_mov_rhs, data.cell_mov_rhs + data.__num_fillers__), torch::indexing::Slice(2, 3)}) = 0.0;
+                grad.index({torch::indexing::Slice(data.cell_mov_rhs, data.cell_mov_rhs + static_cast<int>(data.__num_fillers__ * (1 - st::setting.die_diff))), torch::indexing::Slice(2, 3)}) = 0.0;
                 grad.index({torch::indexing::Slice(data.iopin_mov_lhs, data.iopin_mov_rhs), torch::indexing::Slice(0, 2)}) = 0.0;
             }
             // for (auto macro_id : macro_list) {
@@ -385,7 +386,8 @@ torch::Tensor Partitioner::run_gp3d(NodeData& data_2d) {
                       init_density_map,
                       optimizer,
                       ps,
-                      data);
+                      data,
+                      (data_2d.node_die) * st::setting.patoh_guide_ratio);
     // FIXME
     double init_lr = 1e5;
     if(!st::setting.skip_gp3d)

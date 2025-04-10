@@ -417,7 +417,7 @@ __global__ void wa_wirelength_hpwl_cuda_kernel(
         if (end_idx != start_idx) {
             float macro = 0;
             for (int64_t idx = start_idx; idx < end_idx; idx++) {
-                if (macro_mask[pin_id2node_id[idx]] == 1)
+                if (macro_mask[pin_id2node_id[hyperedge_list[idx]]] == 1)
                 {
                     macro = 1;
                     break;
@@ -506,8 +506,126 @@ __global__ void wa_wirelength_hpwl_cuda_kernel(
                     } else {
                         pin_grad[hyperedge_list[idx]][c] += w * grad;
                         
-                        if (macro_mask[pin_id2node_id[idx]] == 1)
-                            pin_grad[hyperedge_list[idx]][c] -= ratio_multiply[pin_id2node_id[idx]];
+                        if (macro_mask[pin_id2node_id[hyperedge_list[idx]]] == 1)
+                            pin_grad[hyperedge_list[idx]][c] -= ratio_multiply[pin_id2node_id[hyperedge_list[idx]]];
+                    }
+                }
+            }
+        }
+    }
+}
+
+template <typename scalar_t>
+__global__ void wa_wirelength_hpwl_cuda_kernel_with_pin_slide(
+    const torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> pin_pos,
+    const torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> pin_rel_cpos,
+    const torch::PackedTensorAccessor32<int, 1, torch::RestrictPtrTraits> pin_die,
+    const torch::PackedTensorAccessor32<int64_t, 1, torch::RestrictPtrTraits> hyperedge_list,
+    const torch::PackedTensorAccessor32<int64_t, 1, torch::RestrictPtrTraits> hyperedge_list_end,
+    const torch::PackedTensorAccessor32<bool, 1, torch::RestrictPtrTraits> net_mask,
+    const torch::PackedTensorAccessor32<scalar_t, 1, torch::RestrictPtrTraits> net_weight,
+    torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> partial_wa_wl,
+    torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> partial_hpwl,
+    torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> pin_grad,
+    torch::PackedTensorAccessor32<scalar_t, 1, torch::RestrictPtrTraits> pin_slide,
+    const torch::PackedTensorAccessor32<float, 1, torch::RestrictPtrTraits> macro_mask,
+    const torch::PackedTensorAccessor32<int64_t, 1, torch::RestrictPtrTraits> pin_id2node_id,
+    const torch::PackedTensorAccessor32<scalar_t, 1, torch::RestrictPtrTraits> ratio_multiply,
+    int num_nets,
+    float inv_gamma) {
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
+    // const int i = index >> 1;  // net index
+    const int i = index;  // pin index
+    if (i < num_nets && net_mask[i]) {
+        // const int c = index & 1;  // channel index
+        scalar_t w = net_weight[i];
+        int64_t start_idx = 0;
+        if (i != 0) {
+            start_idx = hyperedge_list_end[i - 1];
+        }
+        int64_t end_idx = hyperedge_list_end[i];
+        if (end_idx != start_idx) {
+            float macro = 0;
+            for (int64_t idx = start_idx; idx < end_idx; idx++) {
+                if (macro_mask[pin_id2node_id[hyperedge_list[idx]]] == 1)
+                {
+                    macro = 1;
+                    break;
+                }
+            }
+            for (int c = 0; c < 3; c++) {
+                int64_t pin_id = hyperedge_list[start_idx];
+                scalar_t x_min = pin_pos[pin_id][c];
+                scalar_t x_max = pin_pos[pin_id][c];
+                for (int64_t idx = start_idx + 1; idx < end_idx; idx++) {
+                    scalar_t xx = pin_pos[hyperedge_list[idx]][c];
+                    x_min = min(xx, x_min);
+                    x_max = max(xx, x_max);
+                }
+                partial_hpwl[i][c] = abs(x_max - x_min);
+
+                scalar_t slack = abs(x_max - x_min);
+                double_t xexp_x_sum = 0;
+                double_t xexp_nx_sum = 0;
+                double_t exp_x_sum = 0;
+                double_t exp_nx_sum = 0;
+
+
+
+                for (int64_t idx = start_idx; idx < end_idx; idx++) {
+                    // if ((c == 2) && (pin_die[hyperedge_list[idx]] == -1)) continue; // FIXME: ignore wa_z
+                    if (pin_die[hyperedge_list[idx]] == -1) continue; // FIXME: ignore wa_z
+                    scalar_t xx = pin_pos[hyperedge_list[idx]][c];
+                    double_t exp_x;
+                    double_t exp_nx;
+
+                    exp_x = exp(-(x_max - xx) * inv_gamma * (1 + macro));
+                    exp_nx = exp(-(xx - x_min) * inv_gamma * (1 + macro));
+
+                    xexp_x_sum += xx * exp_x;
+                    xexp_nx_sum += xx * exp_nx;
+                    exp_x_sum += exp_x;
+                    exp_nx_sum += exp_nx;
+                }
+
+                scalar_t s_x = xexp_x_sum / exp_x_sum;
+                scalar_t ns_x = xexp_nx_sum / exp_nx_sum;
+
+                scalar_t wl = s_x - ns_x;
+                partial_wa_wl[i][c] = wl;
+                scalar_t scale = 1;
+
+
+                scalar_t b_x = scale * inv_gamma / (exp_x_sum);
+                scalar_t a_x = scale * (1.0 - inv_gamma * s_x) / exp_x_sum;
+                scalar_t b_nx = scale * (-inv_gamma) / (exp_nx_sum);
+                scalar_t a_nx = scale * (1.0 + inv_gamma * ns_x) / exp_nx_sum;
+
+                for (int64_t idx = start_idx; idx < end_idx; idx++) {
+                    if ((c == 2) && (pin_die[hyperedge_list[idx]] == -1)) continue; // FIXME: ignore wa_z
+                    // if (pin_die[hyperedge_list[idx]] == -1) continue; // FIXME: ignore wa_z
+                    int64_t pin_id = hyperedge_list[idx];
+                    scalar_t xx = pin_pos[pin_id][c];
+                    double_t exp_x;
+                    double_t exp_nx;
+
+                    scalar_t long_side_pin_rel_cpos = 1 / sqrt(pin_rel_cpos[pin_id][0] * pin_rel_cpos[pin_id][0] + pin_rel_cpos[pin_id][1] * pin_rel_cpos[pin_id][1]);
+
+                    exp_x = exp(-(x_max - xx) * inv_gamma * (1 + macro));
+                    exp_nx = exp(-(xx - x_min) * inv_gamma * (1 + macro));
+
+                    scalar_t grad = (a_x + b_x * xx) * exp_x - (a_nx + b_nx * xx) * exp_nx;
+
+                    if (c != 2) {
+                        pin_grad[pin_id][c] = grad;
+                        if (macro_mask[pin_id2node_id[pin_id]] == 1) {
+                            pin_slide[pin_id] += grad * long_side_pin_rel_cpos * abs(pin_rel_cpos[pin_id][c]);
+                        }
+                    } else {
+                        pin_grad[pin_id][c] += w * grad;
+                        
+                        if (macro_mask[pin_id2node_id[pin_id]] == 1)
+                            pin_grad[pin_id][c] -= ratio_multiply[pin_id2node_id[pin_id]];
                     }
                 }
             }
@@ -1199,6 +1317,29 @@ __global__ void calc_node_grad_deterministic_cuda_kernel(
     }
 }
 
+__global__ void calc_node_slide_grad_deterministic_cuda_kernel(
+    torch::PackedTensorAccessor32<float, 1, torch::RestrictPtrTraits> node_slide,
+    const torch::PackedTensorAccessor32<float, 1, torch::RestrictPtrTraits> pin_slide,
+    const torch::PackedTensorAccessor32<int64_t, 1, torch::RestrictPtrTraits> node2pin_list,
+    const torch::PackedTensorAccessor32<int64_t, 1, torch::RestrictPtrTraits> node2pin_list_end,
+    int num_nodes) {
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
+    const int i = index;  // node index
+    if (i < num_nodes) {
+        int64_t start_idx = 0;
+        if (i != 0) {
+            start_idx = node2pin_list_end[i - 1];
+        }
+        int64_t end_idx = node2pin_list_end[i];
+        if (end_idx != start_idx) {
+            node_slide[i] += pin_slide[node2pin_list[start_idx]];
+            for (int64_t idx = start_idx + 1; idx < end_idx; idx++) {
+                node_slide[i] += pin_slide[node2pin_list[idx]];
+            }
+        }
+    }
+}
+
 void calc_node_grad_cuda(torch::Tensor node_grad,
                          torch::Tensor pin_id2node_id,
                          torch::Tensor pin_grad,
@@ -1219,6 +1360,28 @@ void calc_node_grad_cuda(torch::Tensor node_grad,
     } else {
         const auto pin_id2node_id_view = pin_id2node_id.unsqueeze(1).expand({-1, 3});
         node_grad.scatter_add_(0, pin_id2node_id_view, pin_grad);
+    }
+}
+
+void calc_node_slide_grad_cuda(torch::Tensor node_slide,
+                         torch::Tensor pin_id2node_id,
+                         torch::Tensor pin_slide,
+                         torch::Tensor node2pin_list,
+                         torch::Tensor node2pin_list_end,
+                         int num_nodes,
+                         bool deterministic) {
+    if (deterministic) {
+        auto stream = at::cuda::getCurrentCUDAStream();
+        const int threads = 128;
+        const int blocks = (num_nodes + threads - 1) / threads;
+        calc_node_slide_grad_deterministic_cuda_kernel<<<blocks, threads, 0, stream>>>(
+            node_slide.packed_accessor32<float, 1, torch::RestrictPtrTraits>(),
+            pin_slide.packed_accessor32<float, 1, torch::RestrictPtrTraits>(),
+            node2pin_list.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
+            node2pin_list_end.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
+            num_nodes);
+    } else {
+        node_slide.scatter_add_(0, pin_id2node_id, pin_slide);
     }
 }
 
@@ -1249,6 +1412,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> merged_forward_backward_
     auto partial_wa_wl = torch::zeros({num_nets, num_channels}, torch::dtype(pin_pos.dtype()).device(pin_pos.device()));
     auto partial_hpwl = torch::zeros({num_nets, num_channels}, torch::dtype(pin_pos.dtype()).device(pin_pos.device()));
     auto pin_grad = torch::zeros({num_pins, num_channels}, torch::dtype(pin_pos.dtype()).device(pin_pos.device()));
+    auto pin_slide = torch::zeros(num_pins, torch::dtype(pin_pos.dtype()).device(pin_pos.device()));
 
     const int threads = 128;
     const int blocks = (num_pins + threads - 1) / threads;
@@ -1271,8 +1435,9 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> merged_forward_backward_
     AT_DISPATCH_ALL_TYPES(pin_pos.scalar_type(), "wa_wirelength_hpwl", ([&] {
                             //   wa_wirelength_hpwl_linear_model_cuda_kernel<scalar_t><<<blocks2, threads2, 0, stream>>>(
                             //   wa_wirelength_hpwl2_cuda_kernel<scalar_t><<<blocks2, threads2, 0, stream>>>(
-                                  wa_wirelength_hpwl_cuda_kernel<scalar_t><<<blocks2, threads2, 0, stream>>>(
+                                  wa_wirelength_hpwl_cuda_kernel_with_pin_slide<scalar_t><<<blocks2, threads2, 0, stream>>>(
                                   pin_pos.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
+                                  pin_rel_cpos.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
                                   pin_die.packed_accessor32<int, 1, torch::RestrictPtrTraits>(),
                                   hyperedge_list.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
                                   hyperedge_list_end.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
@@ -1281,6 +1446,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> merged_forward_backward_
                                   partial_wa_wl.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
                                   partial_hpwl.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
                                   pin_grad.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
+                                  pin_slide.packed_accessor32<scalar_t, 1, torch::RestrictPtrTraits>(),
                                   macro_mask.packed_accessor32<float, 1, torch::RestrictPtrTraits>(),
                                   pin_id2node_id.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
                                   ratio_multiply.packed_accessor32<scalar_t, 1, torch::RestrictPtrTraits>(),
@@ -1293,9 +1459,13 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> merged_forward_backward_
     // std::cout << "-----------------------------------" << std::endl;
 
     auto node_grad = torch::zeros({num_nodes, num_channels}, torch::dtype(pin_grad.dtype()).device(pin_grad.device()));
+    auto node_slide_grad = torch::zeros(num_nodes, torch::dtype(pin_grad.dtype()).device(pin_grad.device()));
     bool deterministic = true;
     calc_node_grad_cuda(
         node_grad, pin_id2node_id, pin_grad, node2pin_list, node2pin_list_end, num_nodes, deterministic);
+
+    calc_node_slide_grad_cuda(
+        node_slide_grad, pin_id2node_id, pin_slide, node2pin_list, node2pin_list_end, num_nodes, deterministic);
     // const auto pin_id2node_id_view = pin_id2node_id.unsqueeze(1).expand({-1, 3});
     // node_grad.scatter_add_(0, pin_id2node_id_view, pin_grad);
 

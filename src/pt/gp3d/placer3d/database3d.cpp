@@ -99,7 +99,8 @@ NodeData3D::NodeData3D(NodeData& data) {
 
     node_size = torch::cat({node_size, node_size_z}, 1);
     // node_pos = torch::cat({node_pos, torch::randn_like(node_size_z)}, 1);
-    node_pos = torch::cat({node_pos, (torch::rand({node_size_z.sizes()}).round() + 0.5) / 2 * __ori_die_hz__}, 1);
+    // node_pos = torch::cat({node_pos, (torch::rand({node_size_z.sizes()}).round() + 0.5) / 2 * __ori_die_hz__}, 1);
+    node_pos = torch::cat({node_pos, ((data.node_die + 0.5) / 2 * __ori_die_hz__).unsqueeze(1)}, 1);
     auto pin_rel_cpos_z = torch::zeros({num_pins, 1}, torch::dtype(pin_rel_cpos.dtype()));
     pin_rel_cpos = torch::cat({pin_rel_cpos, pin_rel_cpos_z}, 1);
     pin_rel_cpos_top = torch::cat({pin_rel_cpos_top, pin_rel_cpos_z}, 1);

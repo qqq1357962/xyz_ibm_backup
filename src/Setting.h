@@ -101,6 +101,8 @@ public:
     bool dynamic_ratio;
     bool mononlithic;
     int global_const;
+    double die_diff;
+    double patoh_guide_ratio;
 
     // dp
     bool save_model;

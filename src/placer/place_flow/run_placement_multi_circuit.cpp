@@ -39,7 +39,7 @@ void run_placement_main_multi_circuit() {
     auto [design_info, rawdb, gpdb] = load_dataset();
     NodeData data(design_info, device);
     auto macro_mask_2d = data.macro_mask.clone().unsqueeze(1);
-    data.setMacroOrient();
+    // data.setMacroOrient();
     // grad.slice(0, 0, macro_mask_2d.size(0)) *= (1-0.99*macro_mask_2d);
     // for(int i=0;i<data.pin_rel_cpos.size(0);i++)
     // {
@@ -232,6 +232,7 @@ void run_placement_main_multi_circuit() {
             }
             else {
                 auto node_die_check = data.node_die.clone();
+                pt.run_patoh_area(data);
                 node_pos = pt.run_gp3d(data);  // second gp in gp3d mode
                 auto node_die_check2 = pt.node_die.clone();
                 auto node_die_diff = node_die_check.slice(0,data.cell_mov_lhs, data.cell_mov_rhs)^node_die_check2.slice(0,data.cell_mov_lhs, data.cell_mov_rhs);

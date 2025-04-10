@@ -23,5 +23,6 @@ tuple<torch::Tensor, torch::Tensor> calc_obj_and_grad(torch::Tensor mov_node_pos
                                                       vector<ElectronicDensityLayer>& density_map_layers,
                                                       torch::Tensor conn_fix_node_pos,
                                                       ParamScheduler& ps,
-                                                      NodeData3D& data);
+                                                      NodeData3D& data,
+                                                      torch::Tensor node_die_patoh);
 }  // namespace GP3D
