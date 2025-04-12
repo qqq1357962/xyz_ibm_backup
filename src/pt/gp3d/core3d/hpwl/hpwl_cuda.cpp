@@ -24,16 +24,18 @@ void force_remove_overlap(std::vector<int> macro_list, torch::Tensor& node_pos, 
 
 void update_rel_cpos(torch::Tensor& pin_rel_cpos,
                      torch::Tensor pin_id2node_id,
-                     torch::Tensor ratio_difference) {
+                     torch::Tensor ratio_difference,
+                     torch::Tensor current_node_slide_state) {
     CHECK_INPUT(pin_rel_cpos);
     CHECK_INPUT(pin_id2node_id);
     CHECK_INPUT(ratio_difference);
+    CHECK_INPUT(current_node_slide_state);
 
     return update_rel_cpos_cuda(
-        pin_rel_cpos, pin_id2node_id, ratio_difference);
+        pin_rel_cpos, pin_id2node_id, ratio_difference, current_node_slide_state);
 }
 
-tuple<torch::Tensor, torch::Tensor, torch::Tensor> merged_forward_backward_with_hpwl(torch::Tensor node_pos,
+tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> merged_forward_backward_with_hpwl(torch::Tensor node_pos,
                                                                                      torch::Tensor node_die,
                                                                                      torch::Tensor pin_id2node_id,
                                                                                      torch::Tensor pin_rel_cpos,

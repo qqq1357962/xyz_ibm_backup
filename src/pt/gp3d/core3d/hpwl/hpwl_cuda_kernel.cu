@@ -619,7 +619,7 @@ __global__ void wa_wirelength_hpwl_cuda_kernel_with_pin_slide(
                     if (c != 2) {
                         pin_grad[pin_id][c] = grad;
                         if (macro_mask[pin_id2node_id[pin_id]] == 1) {
-                            pin_slide[pin_id] += grad * long_side_pin_rel_cpos * abs(pin_rel_cpos[pin_id][c]);
+                            pin_slide[pin_id] += (-1) * grad * long_side_pin_rel_cpos * pin_rel_cpos[pin_id][c];
                         }
                     } else {
                         pin_grad[pin_id][c] += w * grad;
@@ -1233,14 +1233,17 @@ __global__ void update_rel_cpos_kernel(
     torch::PackedTensorAccessor32<float, 2, torch::RestrictPtrTraits> pin_rel_cpos,
     const torch::PackedTensorAccessor32<int64_t, 1, torch::RestrictPtrTraits> pin_id2node_id,
     const torch::PackedTensorAccessor32<float, 2, torch::RestrictPtrTraits> ratio_difference,
+    const torch::PackedTensorAccessor32<float, 1, torch::RestrictPtrTraits> current_node_slide_state,
     int num_pins) {
     const int index = blockIdx.x * blockDim.x + threadIdx.x;
     // const int i = index >> 1;  // pin index
     const int i = index;  // pin index
     if (i < num_pins) {
         for (int c = 0; c < 2; c++) {
-            // int64_t node_id = pin_id2node_id[i];
+            int64_t node_id = pin_id2node_id[i];
             pin_rel_cpos[i][c] = (pin_rel_cpos[i][c] + 1e-3) * ratio_difference[i][c] - 1e-3;
+            pin_rel_cpos[i][c] = pin_rel_cpos[i][c] * (1 - current_node_slide_state[node_id]) -
+                                 pin_rel_cpos[i][c] * current_node_slide_state[node_id] + 1e-3;
         }
         // const int c = index & 1;  // channel index
     }
@@ -1279,7 +1282,8 @@ __global__ void get_pin_pos_and_invert_pos(
 
 void update_rel_cpos_cuda(torch::Tensor& pin_rel_cpos,
                      torch::Tensor pin_id2node_id,
-                     torch::Tensor ratio_difference)
+                     torch::Tensor ratio_difference,
+                     torch::Tensor current_node_slide_state)
 {
     int num_pins = pin_id2node_id.size(0);
     auto stream = at::cuda::getCurrentCUDAStream();
@@ -1289,6 +1293,7 @@ void update_rel_cpos_cuda(torch::Tensor& pin_rel_cpos,
             pin_rel_cpos.packed_accessor32<float, 2, torch::RestrictPtrTraits>(),
             pin_id2node_id.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
             ratio_difference.packed_accessor32<float, 2, torch::RestrictPtrTraits>(),
+            current_node_slide_state.packed_accessor32<float, 1, torch::RestrictPtrTraits>(),
             num_pins);
 }
 
@@ -1385,7 +1390,7 @@ void calc_node_slide_grad_cuda(torch::Tensor node_slide,
     }
 }
 
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> merged_forward_backward_with_hpwl_cuda(
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> merged_forward_backward_with_hpwl_cuda(
     torch::Tensor node_pos,
     torch::Tensor node_die,
     torch::Tensor pin_id2node_id,
@@ -1469,7 +1474,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> merged_forward_backward_
     // const auto pin_id2node_id_view = pin_id2node_id.unsqueeze(1).expand({-1, 3});
     // node_grad.scatter_add_(0, pin_id2node_id_view, pin_grad);
 
-    return {partial_wa_wl, node_grad, partial_hpwl};
+    return {partial_wa_wl, node_grad, partial_hpwl, node_slide_grad};
 }
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> merged_forward_backward_with_accurate_hpwl_cuda(

@@ -470,14 +470,14 @@ NodeData::NodeData(Dict& design_info, torch::Device device_) {
 }  // END MODULE
 
 //---------------------------------------------------------------------
-void NodeData::setMacroOrient() {
+void NodeData::setMacroOrient(torch::Tensor node_rotate) {
     int core_dim = core_info[1].item().toInt() >= core_info[3].item().toInt() ? 0 : 1;
     // auto node_orient_top_a = node_orient_top.accessor<int64_t, 1>();
     // auto node_orient_bot_a = node_orient_bot.accessor<int64_t, 1>();
     // auto node_size_a = node_size.accessor<float, 2>();
     // auto node_size_top_a = node_size_top.accessor<float, 2>();
     // auto node_size_bot_a = node_size_bot.accessor<float, 2>();
-    auto new_orient = torch::randint(0, 2, node_orient_top.sizes()) * macro_mask * 2;
+    // auto new_orient = torch::randint(0, 2, node_orient_top.sizes()) * macro_mask * 2;
 
     // std::unordered_map<int, int> type_occurance;
 
@@ -520,7 +520,7 @@ void NodeData::setMacroOrient() {
             
     //     }
     // }
-    update_macro_orientation(new_orient);
+    update_macro_orientation(node_rotate);
     // auto pin_rel_cpos_a = pin_rel_cpos.accessor<float, 2>();
     // auto pin_rel_cpos_top_a = pin_rel_cpos_top.accessor<float, 2>();
     // auto pin_rel_cpos_bot_a = pin_rel_cpos_bot.accessor<float, 2>();

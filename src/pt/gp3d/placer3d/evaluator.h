@@ -15,5 +15,6 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> fast_evaluator(torch::Tensor 
                                                    ElectronicDensityLayer& density_map_layer,
                                                    torch::Tensor conn_fix_node_pos,
                                                    ParamScheduler& ps,
-                                                   PlaceData& data);
+                                                   NodeData3D& data,
+                                                   torch::Tensor node_slide_state);
 }  // namespace GP3D

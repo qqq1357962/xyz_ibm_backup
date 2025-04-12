@@ -6,7 +6,7 @@ torch::Tensor node_pos_to_pin_pos_cuda_forward(torch::Tensor node_pos,
                                                torch::Tensor pin_id2node_id,
                                                torch::Tensor pin_rel_cpos);
 
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> merged_forward_backward_with_hpwl_cuda(
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> merged_forward_backward_with_hpwl_cuda(
     torch::Tensor node_pos,
     torch::Tensor node_die,
     torch::Tensor pin_id2node_id,
@@ -23,7 +23,8 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> merged_forward_backward_
 
 void update_rel_cpos_cuda(torch::Tensor& pin_rel_cpos,
                      torch::Tensor pin_id2node_id,
-                     torch::Tensor ratio_difference);
+                     torch::Tensor ratio_difference,
+                     torch::Tensor current_node_slide_state);
 
 torch::Tensor masked_scale_hpwl_sum_cuda(torch::Tensor node_pos,
                                          torch::Tensor pin_id2node_id,

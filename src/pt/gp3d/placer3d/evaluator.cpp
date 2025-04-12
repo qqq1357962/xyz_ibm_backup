@@ -21,7 +21,8 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> fast_evaluator(
     ElectronicDensityLayer& density_map_layer,
     torch::Tensor conn_fix_node_pos,
     ParamScheduler& ps,
-    PlaceData& data) {
+    NodeData3D& data,
+    torch::Tensor node_slide_state) {
     auto [mov_lhs, mov_rhs] = data.movable_index;
     mov_rhs = data.iopin_mov_lhs;
     mov_node_pos = constraint_fn(mov_node_pos);
@@ -31,9 +32,19 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> fast_evaluator(
 
     auto conn_node_pos = mov_node_pos.index({Slice({mov_lhs, mov_rhs})});
     conn_node_pos = torch::cat({conn_node_pos, conn_fix_node_pos}, 0);
+    auto node_pos_channel = conn_node_pos.index({Slice(0, data.cell_mov_rhs), 2});
+    auto pin_rel_cpos = data.pin_rel_cpos_top.clone();
+    auto ratio = node_pos_channel / data.die_info[2 * 2 + 1];
+    ratio = (-(1.5 + 2 * data.macro_mask) + ratio * (4 + data.macro_mask * 4)).unsqueeze(1);
+    ratio = ratio.clamp(0,1);
+    auto pin_rel_cpos_difference = (data.pin_rel_cpos_bot + 1e-3) / (data.pin_rel_cpos_top + 1e-3);
+    auto pin_ratio = ratio.index_select(0, data.pin_id2node_id);
+    auto pin_broadcasted_ratio = pin_ratio.expand_as(pin_rel_cpos_difference);
+    pin_rel_cpos_difference = (pin_rel_cpos_difference*(1-pin_broadcasted_ratio)+pin_broadcasted_ratio);
+    wa_wirelength_hpwl::update_rel_cpos(pin_rel_cpos, data.pin_id2node_id, pin_rel_cpos_difference, node_slide_state);
     torch::Tensor masked_hpwl = wa_wirelength_hpwl::masked_scale_hpwl(conn_node_pos,
                                                                       data.pin_id2node_id,
-                                                                      data.pin_rel_cpos,
+                                                                      pin_rel_cpos,
                                                                       data.hyperedge_list,
                                                                       data.hyperedge_list_end,
                                                                       data.net_mask,

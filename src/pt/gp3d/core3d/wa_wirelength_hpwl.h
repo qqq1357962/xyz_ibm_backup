@@ -24,6 +24,7 @@ public:
                                  at::Tensor ratio_difference,
                                  at::Tensor macro_mask,
                                  at::Tensor node_die_patoh,
+                                 at::Tensor current_node_slide_state,
                                  at::Tensor die_info = torch::empty({0}),
                                  at::Tensor node_die = torch::empty({0})) {
         // Save data for backward in context
@@ -47,13 +48,13 @@ public:
         ratio_multiply = (node_die_patoh - (node_die_patoh.max() + node_die_patoh.min()) / 2).to(ratio_difference_area.options());
         // cout << ratio_multiply << endl;
         
-        wa_wirelength_hpwl::update_rel_cpos(pin_rel_cpos,pin_id2node_id, pin_rel_cpos_difference);
+        wa_wirelength_hpwl::update_rel_cpos(pin_rel_cpos, pin_id2node_id, pin_rel_cpos_difference, current_node_slide_state);
 
         auto net_weight_naive = torch::ones({net_weight.size(0)}, dtype(torch::kFloat)).to(net_weight.device());
         if (st::setting.wa_z_model == "xy") {
             net_weight_naive = net_weight;
         }
-        auto [partial_wa_wl, node_grad, partial_hpwl] =
+        auto [partial_wa_wl, node_grad, partial_hpwl, node_slide_grad] =
             wa_wirelength_hpwl::merged_forward_backward_with_hpwl(node_pos,
                                                                   node_die,
                                                                   pin_id2node_id,
@@ -122,6 +123,9 @@ public:
         at::Tensor sum_hpwl = torch::round(partial_hpwl * hpwl_scale).sum();
         ctx->save_for_backward({node_grad});
 
+        // auto non_zero_indices = torch::nonzero(node_slide_grad);
+        // cout << node_slide_grad[non_zero_indices[0].item<int>()].item<float>() << endl;
+
         // if ((st::setting.iteration - 1) % 100 == 0) {
         //     logger.info("==========%d=========", st::setting.iteration);
         //     logger.info("OVLP WL : %.3E", torch::sum(partial_hpwl1 * hpwl_scale).item<float>());
@@ -135,7 +139,7 @@ public:
         //     // logger.info("%d/%d cells are optimal", node_optim_info.sum().item<int>(), node_optim_info.size(0));
         // }
 
-        return {torch::sum(partial_wa_wl), sum_hpwl};
+        return {torch::sum(partial_wa_wl), sum_hpwl, node_slide_grad};
     }
 
     static variable_list backward(AutogradContext *ctx, variable_list grad_outputs) {
@@ -148,6 +152,7 @@ public:
         // node_grad.index({"...", Slice(0, 2)}) *= st::setting.iteration == 0 ? 1 : st::setting.force_coeff_2d;  // FIXME:
 
         return {node_grad * wa_grad_out,
+                Variable(),
                 Variable(),
                 Variable(),
                 Variable(),

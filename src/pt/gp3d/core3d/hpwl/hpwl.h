@@ -12,7 +12,7 @@ namespace wa_wirelength_hpwl {
 
 torch::Tensor nodePosToPinPos(torch::Tensor node_pos, torch::Tensor pin_id2node_id, torch::Tensor pin_rel_cpos);
 
-tuple<torch::Tensor, torch::Tensor, torch::Tensor> merged_forward_backward_with_hpwl(torch::Tensor node_pos,
+tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> merged_forward_backward_with_hpwl(torch::Tensor node_pos,
                                                                                      torch::Tensor node_die,
                                                                                      torch::Tensor pin_id2node_id,
                                                                                      torch::Tensor pin_rel_cpos,
@@ -43,7 +43,8 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> merged_forward_backward_with_
 
 void update_rel_cpos(torch::Tensor& pin_rel_cpos,
                      torch::Tensor pin_id2node_id,
-                     torch::Tensor ratio_difference);
+                     torch::Tensor ratio_difference,
+                     torch::Tensor current_node_slide_state);
 
 void force_remove_overlap(std::vector<int> macro_list, torch::Tensor& node_pos, int num_macros, torch::Tensor node_size);
 

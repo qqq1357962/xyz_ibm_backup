@@ -232,8 +232,12 @@ void run_placement_main_multi_circuit() {
             }
             else {
                 auto node_die_check = data.node_die.clone();
-                pt.run_patoh_area(data);
-                node_pos = pt.run_gp3d(data);  // second gp in gp3d mode
+                if (st::setting.patoh_guide_ratio > 1e-3) {
+                    pt.run_patoh_area(data);
+                }
+                auto [node_rotate, new_node_pos] = pt.run_gp3d(data);  // second gp in gp3d mode
+                data.setMacroOrient(node_rotate);
+                node_pos = new_node_pos.clone();
                 auto node_die_check2 = pt.node_die.clone();
                 auto node_die_diff = node_die_check.slice(0,data.cell_mov_lhs, data.cell_mov_rhs)^node_die_check2.slice(0,data.cell_mov_lhs, data.cell_mov_rhs);
                 int diff_num = node_die_diff.sum().item<int>();
@@ -254,15 +258,6 @@ void run_placement_main_multi_circuit() {
             via_data.dump(torch::cat({node_pos.slice(1,0,2), via_pos}, 0), node_size555,torch::cat({data.node_die,via_die}), cell_mov_lhs, cell_mov_rhs, data.node_orient_top);
             rawdb->writeICCAD2022(file_path);
             // if (st::setting.force_coeff_2d) {  // false
-            if (false){
-                st::setting.force_coeff_2d = 0;
-                st::setting.num_bin_3d = 50;
-                st::setting.net_weight_coef = 1;
-                st::setting.stop_overflow_3d = 0.11;
-                st::setting.use_filler_3d = 1;
-                pt.node_pos_2d_ground = node_pos;
-                node_pos = pt.run_gp3d(data);
-            }
             data.node_die = pt.node_die.clone();
         } else {
             printlog(LOG_ERROR, "Partitioner %s not found!", st::setting.partitioner.c_str());

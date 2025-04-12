@@ -32,7 +32,7 @@ void apply_precond(torch::Tensor mov_node_pos, ParamScheduler& ps) {
 }
 
 // For Nesterov
-tuple<torch::Tensor, torch::Tensor> calc_obj_and_grad(torch::Tensor mov_node_pos,
+tuple<torch::Tensor, torch::Tensor, torch::Tensor> calc_obj_and_grad(torch::Tensor mov_node_pos,
                                                       std::function<torch::Tensor(torch::Tensor)> constraint_fn,
                                                       torch::Tensor mov_node_size,
                                                       torch::Tensor init_density_map,
@@ -41,7 +41,8 @@ tuple<torch::Tensor, torch::Tensor> calc_obj_and_grad(torch::Tensor mov_node_pos
                                                       torch::Tensor conn_fix_node_pos,
                                                       ParamScheduler& ps,
                                                       NodeData3D& data,
-                                                      torch::Tensor node_die_patoh) {
+                                                      torch::Tensor node_die_patoh,
+                                                      torch::Tensor current_node_slide_state) {
     // we disable merged_forward_backward in C++ version since it is quite complicated
     auto [mov_lhs, mov_rhs] = data.movable_index;
     mov_rhs = data.iopin_mov_lhs;
@@ -91,6 +92,7 @@ tuple<torch::Tensor, torch::Tensor> calc_obj_and_grad(torch::Tensor mov_node_pos
                                                       density_map_layers[0].ratio_difference,
                                                       data.macro_mask,
                                                       node_die_patoh,
+                                                      current_node_slide_state,
                                                       data.die_info,
                                                       node_die);
 
@@ -103,8 +105,9 @@ tuple<torch::Tensor, torch::Tensor> calc_obj_and_grad(torch::Tensor mov_node_pos
     // if (data.node_wgt_grad.numel()) mov_node_pos.mutable_grad() *= data.node_wgt_grad.unsqueeze(1).to(mov_node_pos.device());
     
     torch::Tensor grad = mov_node_pos.grad();
+    torch::Tensor node_slide_grad = wl_val_list[2];
 
-    return {loss, grad};
+    return {loss, grad, node_slide_grad};
 }
 
 tuple<torch::Tensor, torch::Tensor> calc_grad(torch::optim::Optimizer& optimizer,
