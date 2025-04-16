@@ -108,8 +108,8 @@ void Setting::parse(argparse::ArgumentParser args) {
     early_stop_check_plateau = str2bool(args.get<std::string>("--early_stop_check_plateau"));
 
     // TODO: ICCAD 2022 only, remove me after the contest
-    input_path = args.get<std::string>("input_path");
-    output_path = args.get<std::string>("output_path");
+    input_path = args.get<std::string>("--input_path");
+    output_path = args.get<std::string>("--output_path");
     if (input_path != "null") {
         dataset = "iccad2022";
         design_name = input_path;  // TODO:will init it later

@@ -506,18 +506,22 @@ tuple<torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeData& data_2d) {
         // data.total_mov_cell_areas[0] = mov_node_area.masked_select(mask_bot).sum();
         // data.total_mov_cell_areas[1] = mov_node_area.masked_select(mask_top).sum();
 
-        if (step_ovfl > 0.3) {
+        if (step_ovfl > 0.4) {
             node_slide_state = (node_slide_state + node_slide_grad).clamp(0, 1).detach();
         }
         else {
             auto node_slide_distance = node_slide_state - 0.5;
             auto node_slide_norm = (0.5 - torch::abs(node_slide_distance)).clamp(0, 0.5);
             node_slide_distance = (node_slide_distance + 1e-6) / (torch::abs(node_slide_distance) + 1e-6);
-            node_slide_state = (node_slide_state + node_slide_grad * node_slide_norm + node_slide_distance * 0.08).clamp(0, 1).detach();
+            node_slide_state = (node_slide_state + node_slide_grad * node_slide_norm + node_slide_distance / step_ovfl * 0.025).clamp(0, 1).detach();
         }
 
         auto non_zero_indices = torch::nonzero(node_slide_grad);
         auto non_zero_num = torch::count_nonzero(node_slide_grad).item<int>();
+        for (int i = 0; i < non_zero_num; i++) {
+            cout << node_slide_state[non_zero_indices[i].item<int>()].item<float>() << " ";
+        }
+        cout << endl;
 
         auto [hpwl, overflows, mov_density_map] = evaluator_fn(mov_node_pos);
 
@@ -684,7 +688,7 @@ tuple<torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeData& data_2d) {
     }
     auto non_zero_indices = torch::nonzero(node_slide_grad);
     auto non_zero_num = torch::count_nonzero(node_slide_grad).item<int>();
-    auto node_rotate = (node_slide_state * 2).to(torch::kInt32);
+    auto node_rotate = node_slide_state.to(torch::kInt32) * 2;
     for (int i = 0; i < non_zero_num; i++) {
         cout << node_rotate[non_zero_indices[i].item<int>()].item<int>() << endl;
     }

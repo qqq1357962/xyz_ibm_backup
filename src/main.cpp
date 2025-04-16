@@ -9,8 +9,8 @@ void signalHandler(int signum) {
 inline const char* const BoolToString(bool b) { return b ? "true" : "false"; }
 
 void get_iccad22_option(argparse::ArgumentParser& parser) {
-    parser.add_argument("input_path").default_value(string("null")).help("input file path");
-    parser.add_argument("output_path").default_value(string("null")).help("output file path");
+    parser.add_argument("--input_path").default_value(string("null")).help("input file path");
+    parser.add_argument("--output_path").default_value(string("null")).help("output file path");
 }
 
 argparse::ArgumentParser get_option(int argc, char* argv[]) {

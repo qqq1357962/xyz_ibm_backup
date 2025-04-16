@@ -90,28 +90,6 @@ void run_placement_main_multi_circuit() {
     /* pt/via database */
     ViaData via_data;
 
-    // torch::Tensor node_size_backup = data.node_size.clone();
-    // torch::Tensor node_size_bot_backup = data.node_size_bot.clone();
-    // torch::Tensor node_size_top_backup = data.node_size_top.clone();
-    
-    // data.node_size.slice(0, 0, macro_mask_2d.size(0)) -=
-    //     200 * macro_mask_2d;
-
-    // data.node_size_bot.slice(0, 0, macro_mask_2d.size(0)) -=
-    //     200 * macro_mask_2d;
-
-    // data.node_size_top.slice(0, 0, macro_mask_2d.size(0)) -=
-    //     200 * macro_mask_2d;
-
-    // data.node_size.slice(0, 0, macro_mask_2d.size(0)) -=
-    //     data.node_size.slice(0, 0, macro_mask_2d.size(0))* 0.01 * (1-macro_mask_2d);
-
-    // data.node_size_bot.slice(0, 0, macro_mask_2d.size(0)) -=
-    //     data.node_size_bot.slice(0, 0, macro_mask_2d.size(0))* 0.01 * (1-macro_mask_2d);
-
-    // data.node_size_top.slice(0, 0, macro_mask_2d.size(0)) -=
-    //     data.node_size_top.slice(0, 0, macro_mask_2d.size(0))* 0.01 * (1-macro_mask_2d);
-
 
     /* update data info function */
     std::function<void(torch::Tensor)> update_model_fn =
@@ -245,18 +223,18 @@ void run_placement_main_multi_circuit() {
             }
             data.node_pos = node_pos;
 
-            via_data = ViaData(data, rawdb, data.node_die);
-            auto node_size555 = data.node_size_bot * (1 - node_die).unsqueeze(1) + data.node_size_top * node_die.unsqueeze(1);
-            std::filesystem::path current_dir(std::filesystem::current_path());
-            std::filesystem::path result_dir(st::setting.result_dir);
-            std::filesystem::path exp_id(st::setting.exp_id);
-            std::filesystem::path filename("gp3d_output.txt");
-            std::filesystem::path file_path = (current_dir / result_dir / exp_id / filename);
-            auto via_pos = torch::ones({data.num_nets,2});
-            auto via_die = torch::ones({data.num_nets});
-            via_die *= -1;
-            via_data.dump(torch::cat({node_pos.slice(1,0,2), via_pos}, 0), node_size555,torch::cat({data.node_die,via_die}), cell_mov_lhs, cell_mov_rhs, data.node_orient_top);
-            rawdb->writeICCAD2022(file_path);
+            // via_data = ViaData(data, rawdb, data.node_die);
+            // auto node_size555 = data.node_size_bot * (1 - node_die).unsqueeze(1) + data.node_size_top * node_die.unsqueeze(1);
+            // std::filesystem::path current_dir(std::filesystem::current_path());
+            // std::filesystem::path result_dir(st::setting.result_dir);
+            // std::filesystem::path exp_id(st::setting.exp_id);
+            // std::filesystem::path filename("gp3d_output.txt");
+            // std::filesystem::path file_path = (current_dir / result_dir / exp_id / filename);
+            // auto via_pos = torch::ones({data.num_nets,2});
+            // auto via_die = torch::ones({data.num_nets});
+            // via_die *= -1;
+            // via_data.dump(torch::cat({node_pos.slice(1,0,2), via_pos}, 0), node_size555,torch::cat({data.node_die,via_die}), cell_mov_lhs, cell_mov_rhs, data.node_orient_top);
+            // rawdb->writeICCAD2022(file_path);
             // if (st::setting.force_coeff_2d) {  // false
             data.node_die = pt.node_die.clone();
         } else {
@@ -423,96 +401,7 @@ void run_placement_main_multi_circuit() {
         // int num_bin_y_backup = st::setting.num_bin_y;
         if (!st::setting.use_floorplan) {
             via_data = ViaData(data, rawdb, node_die);
-            // auto mov_node_die = data.node_die.index({Slice(cell_mov_lhs, cell_mov_rhs)}).clone();
-            // auto mov_node_weights = torch::empty({2, mov_node_die.size(0)}, dtype(torch::kFloat));
-            // mov_node_weights[0] = (1 - mov_node_die.clone());
-            // mov_node_weights[1] = mov_node_die.clone();
-            // data.mov_node_weights = mov_node_weights;
-            // data.node_size =  mov_node_weights[0].unsqueeze(1)*data.node_size_bot+mov_node_weights[1].unsqueeze(1)*data.node_size_top;
-            // node_pos = run_lg(data,
-            //                   via_data,
-            //                   node_pos.slice(0,cell_mov_lhs,cell_mov_rhs),
-            //                   hpwl_state,
-            //                   cell_mov_lhs,
-            //                   cell_mov_rhs,
-            //                   via_mov_lhs,
-            //                   via_mov_rhs,
-            //                   mov_lhs,
-            //                   mov_rhs,
-            //                   true);
-            // node_pos = node_pos.to(data.node_pos.device());
-            // data.node_pos.slice(0,0,data.macro_mask.size(0)) = node_pos.slice(0,0,data.macro_mask.size(0)).clone();
-                            //   true);
             logger.info("finish getting viadata");
-
-            // node_size_backup = node_die.unsqueeze(1) * node_size_top_backup + (1 - node_die).unsqueeze(1) * node_size_bot_backup;
-
-            // data.node_size_bot.slice(0, 0, node_size_bot_backup.size(0)) = node_size_bot_backup;
-            // data.node_size_top.slice(0, 0, node_size_top_backup.size(0)) = node_size_top_backup;
-
-            // data.node_size.slice(0, 0, node_size_bot_backup.size(0)) =
-            //     node_die.unsqueeze(1) * node_size_top_backup + (1 - node_die).unsqueeze(1) * node_size_bot_backup;
-
-            // auto node_size_backup = data.node_size.clone();
-            // auto node_size_bot_backup = data.node_size_bot.clone();
-            // auto node_size_top_backup = data.node_size_top.clone();
-
-            // auto pin_rel_cpos_backup = data.pin_rel_cpos.clone();
-            // auto pin_rel_cpos_top_backup = data.pin_rel_cpos_top.clone();
-            // auto pin_rel_cpos_bot_backup = data.pin_rel_cpos_bot.clone();
-            // auto hyperedge_list_backup = data.hyperedge_list.clone();
-            // auto hyperedge_list_end_backup = data.hyperedge_list_end.clone();
-            // auto net_mask_backup = data.net_mask.clone();
-            // auto pin_id2node_id_backup = data.pin_id2node_id.clone();
-
-            // double padding = st::setting.gp_padding;
-            // auto macro_mask_2d = data.macro_mask.unsqueeze(1);
-
-            // data.node_size.slice(0, 0, macro_mask_2d.size(0)) +=
-            //     data.node_size.slice(0, 0, macro_mask_2d.size(0)) * macro_mask_2d * padding;
-
-            // data.node_size_bot.slice(0, 0, macro_mask_2d.size(0)) +=
-            //     data.node_size_bot.slice(0, 0, macro_mask_2d.size(0)) * macro_mask_2d * padding;
-
-            // data.node_size_top.slice(0, 0, macro_mask_2d.size(0)) +=
-            //     data.node_size_top.slice(0, 0, macro_mask_2d.size(0)) * macro_mask_2d * padding;
-            
-            // data.node_size.slice(0, 0, macro_mask_2d.size(0)) +=
-            //     200 * macro_mask_2d;
-
-            // data.node_size_bot.slice(0, 0, macro_mask_2d.size(0)) +=
-            //     200 * macro_mask_2d;
-
-            // data.node_size_top.slice(0, 0, macro_mask_2d.size(0)) +=
-            //     200 * macro_mask_2d;
-
-            // data.node_size.slice(0, 0, macro_mask_2d.size(0)) +=
-            //     data.node_size.slice(0, 0, macro_mask_2d.size(0))* 0.01 * (1-macro_mask_2d);
-
-            // data.node_size_bot.slice(0, 0, macro_mask_2d.size(0)) +=
-            //     data.node_size_bot.slice(0, 0, macro_mask_2d.size(0))* 0.01 * (1-macro_mask_2d);
-
-            // data.node_size_top.slice(0, 0, macro_mask_2d.size(0)) +=
-            //     data.node_size_top.slice(0, 0, macro_mask_2d.size(0))* 0.01 * (1-macro_mask_2d);
-
-            // data.node_size.slice(0, 0, macro_mask_2d.size(0)) -=
-            //     data.node_size.slice(0, 0, macro_mask_2d.size(0)) * (1-macro_mask_2d);
-
-            // data.node_size_bot.slice(0, 0, macro_mask_2d.size(0)) -=
-            //     data.node_size_bot.slice(0, 0, macro_mask_2d.size(0)) * (1-macro_mask_2d);
-
-            // data.node_size_top.slice(0, 0, macro_mask_2d.size(0)) -=
-            //     data.node_size_top.slice(0, 0, macro_mask_2d.size(0)) * (1-macro_mask_2d);
-
-            // data.pin_rel_cpos.slice(0, 0, macro_mask_2d.size(0)) +=
-            //     data.pin_rel_cpos.slice(0, 0, macro_mask_2d.size(0)) * macro_mask_2d * padding;
-
-            // data.pin_rel_cpos_top.slice(0, 0, macro_mask_2d.size(0)) +=
-            //     data.pin_rel_cpos_top.slice(0, 0, macro_mask_2d.size(0)) * macro_mask_2d * padding;
-
-            // data.pin_rel_cpos_bot.slice(0, 0, macro_mask_2d.size(0)) +=
-            //     data.pin_rel_cpos_bot.slice(0, 0, macro_mask_2d.size(0)) * macro_mask_2d * padding;
-
             auto node_die_backup = data.node_die.clone();
             auto node_pos_backup = node_pos.clone();
 
@@ -526,10 +415,6 @@ void run_placement_main_multi_circuit() {
             if(st::setting.mode==4)
             {
                 st::setting.magic_hpwl=70000;
-                // st::setting.magic_hpwl = st::setting.first_magic_hpwl;
-                // st::setting.num_bin_x = st::setting.first_num_bin_x;
-                // st::setting.num_bin_y = st::setting.first_num_bin_y;
-                //st::setting.stop_overflow = st::setting.stop_overflow * 5;
             }
             st::setting.magic_hpwl=70000;
             node_pos = run_gp(data,
@@ -555,75 +440,6 @@ void run_placement_main_multi_circuit() {
             auto data_size_check = data.node_size_bot * (1 - node_die).unsqueeze(1) + data.node_size_top * node_die.unsqueeze(1);
             via_data.dump(node_pos, data_size_check, data.node_die, cell_mov_lhs, cell_mov_rhs, data.node_orient_top);
             rawdb->writeICCAD2022(file_path);
-
-            // data.node_size.slice(0,0,node_size_backup.size(0)) = node_size_backup;
-            // node_size_backup = node_die.unsqueeze(1) * node_size_top_backup + (1 - node_die).unsqueeze(1) * node_size_bot_backup;
-            //node_pos = pt.remove_macro_margin(data, node_pos, data.node_size, node_size_backup).detach().clone();
-
-            // data.node_size_bot.slice(0, 0, node_size_bot_backup.size(0)) = node_size_bot_backup;
-            // data.node_size_top.slice(0, 0, node_size_top_backup.size(0)) = node_size_top_backup;
-
-            // data.node_size.slice(0, 0, node_size_bot_backup.size(0)) =
-            //     node_die.unsqueeze(1) * node_size_top_backup + (1 - node_die).unsqueeze(1) * node_size_bot_backup;
-
-            // data.pin_rel_cpos.slice(0, 0, pin_rel_cpos_backup.size(0)) = pin_rel_cpos_backup;
-            // data.pin_rel_cpos_bot.slice(0, 0, pin_rel_cpos_top_backup.size(0)) = pin_rel_cpos_bot_backup;
-            // data.pin_rel_cpos_top.slice(0, 0, pin_rel_cpos_bot_backup.size(0)) = pin_rel_cpos_top_backup;
-            if(false)
-            {
-                // for(int i=0;i<data.macro_list.size();i++)
-                // {
-                //     int macro_id = data.macro_list[i];
-                //     data.node_size[macro_id]/=100;
-                //     data.node_size_top[macro_id]/=100;
-                //     data.node_size_bot[macro_id]/=100;
-                // }
-                node_pos = run_lg(data,
-                              via_data,
-                              node_pos,
-                              hpwl_state,
-                              cell_mov_lhs,
-                              cell_mov_rhs,
-                              via_mov_lhs,
-                              via_mov_rhs,
-                              mov_lhs,
-                              mov_rhs,
-                              false);
-                            //   true);
-                std::filesystem::path current_dir(std::filesystem::current_path());
-                std::filesystem::path result_dir(st::setting.result_dir);
-                std::filesystem::path exp_id(st::setting.exp_id);
-                std::filesystem::path filename("gp2.5d_1_lg_output.txt");
-                std::filesystem::path file_path = (current_dir / result_dir / exp_id / filename);
-                auto node_size_checkk = data.node_size_bot * (1 - node_die).unsqueeze(1) + data.node_size_top * node_die.unsqueeze(1);
-                via_data.dump(node_pos, node_size_checkk, data.node_die, cell_mov_lhs, cell_mov_rhs, data.node_orient_top);
-                rawdb->writeICCAD2022(file_path);
-            }
-            
-
-            // data.node_pos = node_pos.slice(0, 0, node_pos_backup.size(0));
-
-            // data.node_size = data.node_size.slice(0, 0, node_size_backup.size(0));
-            // data.node_size_bot = data.node_size_bot.slice(0, 0, node_size_bot_backup.size(0));
-            // data.node_size_top = data.node_size_top.slice(0, 0, node_size_top_backup.size(0));
-
-            // data.pin_rel_cpos = data.pin_rel_cpos.slice(0, 0, pin_rel_cpos_backup.size(0));
-            // data.pin_rel_cpos_bot = data.pin_rel_cpos_bot.slice(0, 0, pin_rel_cpos_top_backup.size(0));
-            // data.pin_rel_cpos_top = data.pin_rel_cpos_top.slice(0, 0, pin_rel_cpos_bot_backup.size(0));
-
-            // data.node_die = data.node_die.slice(0, 0, node_die_backup.size(0));
-
-            // data.hyperedge_list = hyperedge_list_backup;
-            // data.hyperedge_list_end = hyperedge_list_end_backup;
-            // data.net_mask = net_mask_backup;
-            // data.pin_id2node_id = pin_id2node_id_backup;
-            // Partitioner pt(data, hpwl_state);
-            // data.movable_index = make_tuple(0, data.macro_mask.size(0));
-            // data.cell_mov_rhs = data.macro_mask.size(0);
-            // pt.node_pos_2d_ground = data.node_pos;
-            // pt.run_gp3d(data);
-            // data.node_die = pt.node_die.clone();
-            // node_die = pt.node_die.clone();
             node_size = data.node_size.clone();
         }
         if(st::setting.mode==4)
@@ -636,49 +452,9 @@ void run_placement_main_multi_circuit() {
             // data.num_bin_y = st::setting.second_num_bin_y;
             //st::setting.stop_overflow = st::setting.stop_overflow / 5;
         }
-        if (false) {
-            via_data = ViaData(data, rawdb, node_die);
-            node_pos = run_gp(data,
-                        via_data,
-                        node_pos,
-                        hpwl_state,
-                        cell_mov_lhs,
-                        cell_mov_rhs,
-                        via_mov_lhs,
-                        via_mov_rhs,
-                        mov_lhs,
-                        mov_rhs,
-                        false,
-                        false,
-                        false,
-                        "second");  // third gp for gp3d mode
-               
-            node_size = data.node_size.clone();
-            std::filesystem::path current_dir(std::filesystem::current_path());
-            std::filesystem::path result_dir(st::setting.result_dir);
-            std::filesystem::path exp_id(st::setting.exp_id);
-            std::filesystem::path filename("gp2.5d_2_output.txt");
-            std::filesystem::path file_path = (current_dir / result_dir / exp_id / filename);
-            auto node_size3 = data.node_size_bot * (1 - node_die).unsqueeze(1) + data.node_size_top * node_die.unsqueeze(1);
-            via_data.dump(node_pos, node_size3, data.node_die, cell_mov_lhs, cell_mov_rhs, data.node_orient_top);
-            rawdb->writeICCAD2022(file_path);
-        }
         
 
         for (; st::setting.round_recursion >= 0;) {
-            // logger.info("============== GP round %d ==============", st::setting.round_recursion);
-
-            // data.reset_net_node();
-            // data.node_pos = node_pos.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs), Slice(0, 2)});
-            // st::setting.force_coeff_2d = 1;
-            // st::setting.num_bin_3d = st::setting.num_bin_x;
-            // st::setting.stop_overflow_3d = 0.12;
-            // st::setting.cut_net_thres = 0;
-            // st::setting.net_weight_coef = 0;
-
-            // st::setting.min_stop_iter = 550;
-            // st::setting.filler_type = "surround";
-
             /* hpwl-driven fm */
             if (true) {
                 // node_pos = pt.run_gp3d(data);
@@ -758,15 +534,6 @@ void run_placement_main_multi_circuit() {
     node_size_bot = data.node_size_bot * (1 - node_die).unsqueeze(1);
     node_size_top = data.node_size_top * node_die.unsqueeze(1);
 
-    // for(auto macro_id: data.macro_list)
-    // {
-    //     data.node_size[macro_id]/=20;
-    //     via_data.node_size[macro_id] = max(via_data.node_size[macro_id]/20, via_data.row_height);
-    //     data.node_size[macro_id][1] = int(data.node_size[macro_id][1].item<int>() / via_data.row_height.item<int>()) * via_data.row_height.item<int>();
-    //     via_data.node_size[macro_id][1] = int(data.node_size[macro_id][1].item<int>() / via_data.row_height.item<int>()) * via_data.row_height.item<int>();
-    // }
-    // via_data.dump(node_pos, node_size, data.node_die, cell_mov_lhs, cell_mov_rhs);
-    // rawdb->writeICCAD2022("/data/ssd/lxiao23/6_2/xyzplace/gp_output.txt");
     /* Legalization */
     if (st::setting.lg) {
         node_pos = run_lg(data,
@@ -799,14 +566,14 @@ void run_placement_main_multi_circuit() {
         hpwl_state.hpwls_lg = hpwl_state.hpwls[hpwl_state.hpwl_idx - 1];
     }
 
-    via_data.dump(node_pos, node_size, data.node_die, cell_mov_lhs, cell_mov_rhs, data.node_orient_top);
-    std::filesystem::path current_dir(std::filesystem::current_path());
-    std::filesystem::path result_dir(st::setting.result_dir);
-    std::filesystem::path exp_id(st::setting.exp_id);
-    std::filesystem::path filename("gp2.5d_2_lg_output.txt");
-    std::filesystem::path file_path = (current_dir / result_dir / exp_id / filename);
-    // rawdb->writeICCAD2022("/data/ssd/lxiao23/6_2/xyzplace/lg_output.txt");
-    rawdb->writeICCAD2022(file_path);
+    // via_data.dump(node_pos, node_size, data.node_die, cell_mov_lhs, cell_mov_rhs, data.node_orient_top);
+    // std::filesystem::path current_dir(std::filesystem::current_path());
+    // std::filesystem::path result_dir(st::setting.result_dir);
+    // std::filesystem::path exp_id(st::setting.exp_id);
+    // std::filesystem::path filename("gp2.5d_2_lg_output.txt");
+    // std::filesystem::path file_path = (current_dir / result_dir / exp_id / filename);
+    // // rawdb->writeICCAD2022("/data/ssd/lxiao23/6_2/xyzplace/lg_output.txt");
+    // rawdb->writeICCAD2022(file_path);
     // rawdb->writeICCAD2022("/data/ssd/lxiao23/6_2/xyzplace/lg_output.txt");
 
     // /* post process */  // TODO:

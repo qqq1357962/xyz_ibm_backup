@@ -33,6 +33,7 @@ verify/
 result*
 cml.txt
 output/*
+output*
 place
 README_tmp.md
 tmp.zip
