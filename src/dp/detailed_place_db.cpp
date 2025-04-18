@@ -16,8 +16,10 @@ DetailedPlaceDataTensor::DetailedPlaceDataTensor(NodeData& data, torch::Tensor n
     /* process pos c->l */
     node_pos_init = node_pos_.clone();
     node_size = node_size_;
-    node_size_x = node_size.index({"...", 0});
-    node_size_y = node_size.index({"...", 1});
+    node_size_x = node_size.index({"...", 0}).clone();
+    node_size_y = node_size.index({"...", 1}).clone();
+    node_size_x_back_up = node_size.index({"...", 0}).clone();
+    node_size_y_back_up = node_size.index({"...", 1}).clone();
     init_x = node_pos_init.index({"...", 0}) - node_size_x / 2;
     init_y = node_pos_init.index({"...", 1}) - node_size_y / 2;
     x = init_x.clone();  // FIXME: center pos -> lower-left

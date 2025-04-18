@@ -70,6 +70,9 @@ public:
     torch::Tensor node_size_x;
     torch::Tensor node_size_y;
 
+    torch::Tensor node_size_x_back_up;
+    torch::Tensor node_size_y_back_up;
+
     /* pin info */
     torch::Tensor pin_offset_x;
     torch::Tensor pin_offset_y;
@@ -92,8 +95,8 @@ public:
         }
     };
     void update_node_pos(torch::Tensor node_pos) {
-        node_pos.index({"...", 0}).data().copy_(x + node_size_x / 2);
-        node_pos.index({"...", 1}).data().copy_(y + node_size_y / 2);
+        node_pos.index({"...", 0}).data().copy_(x + node_size_x_back_up / 2);
+        node_pos.index({"...", 1}).data().copy_(y + node_size_y_back_up / 2);
         init_x.data().copy_(x);
         init_y.data().copy_(y);
     }

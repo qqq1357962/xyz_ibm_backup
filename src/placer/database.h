@@ -313,6 +313,7 @@ public:
     bool init_fence_region();
     void logging_statistics();
     void setMacroOrient();
+    void setMacroOrient_vertical();
     void setMacroOrient(torch::Tensor node_rotate);
     void update_macro_orientation(at::Tensor new_node_orient);
     void updata_shape_by_density_grad(torch::Tensor density_grad_4part, torch::Tensor& mov_node_size, int iteration);

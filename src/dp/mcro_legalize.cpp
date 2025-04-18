@@ -415,6 +415,12 @@ bool macroLegalization(NodeData& data, DetailedPlaceData& db, int num_bins_x, in
     std::vector<int> macros_;
     std::vector<int> macros;
 
+    for (int i = 0; i < data.macro_list.size(); i++) {
+        auto macro_id = data.macro_list[i];
+        db.node_size_x[macro_id] = std::ceil(db.node_size_x[macro_id] / db.site_width) * db.site_width;
+        db.node_size_y[macro_id] = std::ceil(db.node_size_y[macro_id] / db.row_height) * db.row_height;
+    }
+
     for (int i = 0; i < db.num_movable_nodes; ++i) {
         if (db.is_dummy_fixed(i)) {
             if(db.node_weight[i]==0)

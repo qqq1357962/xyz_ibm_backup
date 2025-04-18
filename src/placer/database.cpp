@@ -577,6 +577,12 @@ void NodeData::setMacroOrient() {
     update_macro_orientation(new_orient);
 }
 
+void NodeData::setMacroOrient_vertical() {
+    int core_dim = core_info[1].item().toInt() >= core_info[3].item().toInt() ? 0 : 1;
+    auto new_orient = torch::ones(node_orient_top.size(0), torch::dtype(torch::kInt)) * macro_mask;
+    update_macro_orientation(new_orient);
+}
+
 //---------------------------------------------------------------------
 
 void NodeData::backup_ori_var() {

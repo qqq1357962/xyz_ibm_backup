@@ -229,9 +229,11 @@ torch::Tensor run_gp(NodeData& data,
                 torch::Tensor overflow_sum = ((mov_density_map - st::setting.target_density) * data.bin_area)
                                                  .clamp_(0.0)
                                                  .sum();  // TODO: each layer different ovfl
-                return overflow_sum / mov_cell_areas_without_macro[i];
-                // return overflow_sum / (data.mov_cell_areas[i] - current_die_macro_cell_areas);
-                // return overflow_sum / data.mov_cell_areas[i];
+                torch::Tensor area_sum = (mov_density_map * data.bin_area)
+                                                 .clamp_(0.0)
+                                                 .sum();  // TODO: each layer different ovfl
+                return overflow_sum / area_sum;
+                // return overflow_sum / mov_cell_areas_without_macro[i];
             };
         auto overflow_helper_cc = make_tuple(mov_lhs, mov_rhs, overflow_fn_cc);
         density_map_layers.emplace_back(data.unit_len,
@@ -583,7 +585,7 @@ torch::Tensor run_gp(NodeData& data,
             //     ps.wa_coeffs[0], ps.wa_coeffs[1]);
 
             if (st::setting.draw_placement) {
-                if (false) {
+                if (true) {
                     auto node_shift = (data.__die_shift__.index({Slice(0, 2)}) / data.__die_scale__.index({Slice(0, 2)})).expand_as(mov_node_pos_all).to(torch::kCPU);
                     auto true_mov_node_pos_all = mov_node_pos_all.to(torch::kCPU) + node_shift;
                     auto info1 = make_tuple(st::setting.round_recursion, iteration, data.design_name + "_GP_0");

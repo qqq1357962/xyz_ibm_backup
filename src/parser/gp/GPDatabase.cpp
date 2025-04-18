@@ -593,7 +593,7 @@ torch::Tensor GPDatabase::getMacroMaskTensor() {
     torch::Tensor macro_mask = torch::zeros({num_nodes});
     auto macro_mask_a = macro_mask.accessor<coord_type, 1>();
     for (auto& node : nodes) {
-        if (node.getHeight()>row_height * 5) {
+        if (node.getHeight()>row_height) {
             macro_mask_a[node.getId()]=1;
         } else {
             // ICCAD/DAC 2012 contain fixed polygon-shape nodes. We consider them as placement

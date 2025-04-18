@@ -260,12 +260,12 @@ tuple<torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeData& data_2d) {
         overflows_all[0] = overflow_all.index({Slice(0, data.num_bin_z / 2)}).sum();
         overflows_all[1] = overflow_all.index({Slice(data.num_bin_z / 2, None)}).sum();
 
-        float target_density_xy = 2;
-        float height_cells = data.num_bin_z / 2;
-        auto density_map_xy = mov_density_map.sum(2);
-        torch::Tensor overflow_xy =
-            ((density_map_xy/height_cells - target_density_xy) * data.bin_area * height_cells).clamp_(0.0).sum(0).sum(0);
-        overflow_xy/=(data.total_mov_cell_areas[0]*2);
+        // float target_density_xy = 2;
+        // float height_cells = data.num_bin_z / 2;
+        // auto density_map_xy = mov_density_map.sum(2);
+        // torch::Tensor overflow_xy =
+        //     ((density_map_xy/height_cells - target_density_xy) * data.bin_area * height_cells).clamp_(0.0).sum(0).sum(0);
+        // overflow_xy/=(data.total_mov_cell_areas[0]*2);
         //@@ cout<<"overflow_xy: "<<overflow_xy.item<float>()<<endl;
 
         return (overflows / overflows_all);
@@ -518,10 +518,6 @@ tuple<torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeData& data_2d) {
 
         auto non_zero_indices = torch::nonzero(node_slide_grad);
         auto non_zero_num = torch::count_nonzero(node_slide_grad).item<int>();
-        for (int i = 0; i < non_zero_num; i++) {
-            cout << node_slide_state[non_zero_indices[i].item<int>()].item<float>() << " ";
-        }
-        cout << endl;
 
         auto [hpwl, overflows, mov_density_map] = evaluator_fn(mov_node_pos);
 
@@ -616,23 +612,6 @@ tuple<torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeData& data_2d) {
                     auto node_size_draw_cp = torch::cat({node_size_bot, node_size_top}, 0);
                     draw_fig_with_cairo_cpp_cross_chip(node_pos_draw_cp, node_size_draw_cp, data, info3);
                 }
-
-                // std::filesystem::path eval(std::string("eval"));
-                // std::filesystem::path fig_root = logger.res_root / eval;
-                // if (!std::filesystem::exists(fig_root)) {
-                //     std::filesystem::create_directories(fig_root);
-                // }
-                // auto density_map = torch::rot90(mov_density_map.index({"...", 5}).to(torch::kCPU));
-                // plot_pt(density_map,
-                //         (char *)"imshow",
-                //         (char *)fig_root.string().c_str(),
-                //         (char *)("3d_density_" + std::to_string(iteration) + ".png").c_str());
-
-                // auto density_map1 = torch::rot90((torch::abs(mov_density_map.index({"...", 5}) -
-                // mov_density_map.index({"...", 4}))).to(torch::kCPU)); plot_pt(density_map1,
-                //         (char *)"imshow",
-                //         (char *)fig_root.string().c_str(),
-                //         (char *)("3d_density_dif_" + std::to_string(iteration) + ".png").c_str());
             }
         }
         // if (roll_back_cnt && ps.need_to_early_stop()) {
@@ -689,9 +668,9 @@ tuple<torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeData& data_2d) {
     auto non_zero_indices = torch::nonzero(node_slide_grad);
     auto non_zero_num = torch::count_nonzero(node_slide_grad).item<int>();
     auto node_rotate = node_slide_state.to(torch::kInt32) * 2;
-    for (int i = 0; i < non_zero_num; i++) {
-        cout << node_rotate[non_zero_indices[i].item<int>()].item<int>() << endl;
-    }
+    // for (int i = 0; i < non_zero_num; i++) {
+    //     cout << node_rotate[non_zero_indices[i].item<int>()].item<int>() << endl;
+    // }
 
     // iteration = 1;
     /* retrieve best score and evaluate without filler */
@@ -734,161 +713,9 @@ tuple<torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeData& data_2d) {
     auto node_area_top = torch::prod(data_2d.node_size_top, 1);
     auto node_area_bot_at = node_area_bot.accessor<float, 1>();
     auto node_area_top_at = node_area_top.accessor<float, 1>();
-    // for(int i=0;i<data.cell_mov_rhs;i++){
-    //     if(data.macro_mask[i].item<int>()==1)
-    //     {
-    //         if(node_pos_channel[i].item<float>()>slicer.item<float>())
-    //         {
-    //             node_die[i]=1;
-    //             area1_macro+=node_area_top_at[i];
-    //         }else{
-    //             area0_macro+=node_area_bot_at[i];
-    //             node_die[i]=0;
-    //         }
-    //         continue;
-    //     }
-    //     else{
-    //         node_die[i]=1;
-    //         area1_std+=node_area_top_at[i];
-    //     }
-    // }
-    // float bound0 = data_2d.max_mov_cell_areas[0].item<float>();
-    // float bound1 = data_2d.max_mov_cell_areas[1].item<float>();
-    // auto index_at = indices.accessor<long,1>();
-    // int criteria=0;
-    // for(int i=0;i<data.cell_mov_rhs;i++)
-    // {
-    //     int index = index_at[i];
-    //     if(data.macro_mask[index].item<int>()==1)
-    //     {
-    //         continue;
-    //     }
-    //     else{
-    //         float cell_area_top = node_area_top_at[index];
-    //         float cell_area_bot = node_area_bot_at[index];
-    //         if((area0_macro+area0_std+cell_area_bot)>bound0)
-    //         {
-    //             criteria=1;
-    //         }
-    //         if((criteria==0 && area0_std<area1_std)||(criteria==1 && (area0_macro+area0_std)<(area1_macro+area1_std)))
-    //         {
-    //             node_die[index] = 0;
-    //             area0_std+=cell_area_bot;
-    //             area1_std-=cell_area_top;
-    //         }else{
-    //             if(criteria==0 && (area1_macro+area1_std)>bound1)
-    //             {
-    //                 criteria=1;
-    //             }
-    //             else{
-    //                 break;
-    //             }
-    //         }
-    //     } 
-    // }
-    // logger.info("after slice, area0_macro=%f, area1_macro=%f",area0_macro,area1_macro);
-    // logger.info("after slice, area0_std=%f, area1_std=%f",area0_std,area1_std);
-    // logger.info("after slice, area0_total=%f, area1_total=%f",area0_std+area0_macro,area1_std+area1_macro);
 
     auto parter = (node_pos_channel > slicer);
     node_die = torch::_cast_Int(parter);
-
-    // vector<float> macro_lx;
-    // vector<float> macro_ly;
-    // vector<float> macro_hx;
-    // vector<float> macro_hy;
-    // vector<int> macro_die;
-    // for(auto macro_id:data_2d.macro_list){
-    //     float size_x;
-    //     float size_y;
-    //     macro_die.push_back(node_die[macro_id].item<int>());
-    //     if(node_die[macro_id].item<int>()==0)
-    //     {
-    //         size_x = data_2d.node_size_bot[macro_id][0].item<float>();
-    //         size_y = data_2d.node_size_bot[macro_id][1].item<float>();
-    //     }else{
-    //         size_x = data_2d.node_size_top[macro_id][0].item<float>();
-    //         size_y = data_2d.node_size_top[macro_id][1].item<float>();
-    //     }
-    //     macro_lx.push_back(node_pos[macro_id][0].item<float>()-size_x/2);
-    //     macro_hx.push_back(node_pos[macro_id][0].item<float>()+size_x/2);
-    //     macro_ly.push_back(node_pos[macro_id][1].item<float>()-size_y/2);
-    //     macro_hy.push_back(node_pos[macro_id][1].item<float>()+size_y/2);
-       
-    // }
-    // for(int j=0;j<macro_lx.size();j++)
-    // {
-    //     logger.info("id: %d, %f, %f, %f, %f", j, macro_lx[j], macro_hx[j], macro_ly[j], macro_hy[j]);
-    // }
-    // int change_cnt = 0;
-    // for(int i=0;i<data.cell_mov_rhs;i++){
-    //     if(data_2d.macro_mask[i].item<int>()==1)
-    //     {
-    //         continue;
-    //     }
-    //     float node_x = node_pos[i][0].item<float>();
-    //     float node_y = node_pos[i][1].item<float>();
-    //     float distance0=0;
-    //     float distance1=0;
-    //     for(int j=0;j<macro_lx.size();j++)
-    //     {
-    //         if(node_x>macro_lx[j]&&node_x<macro_hx[j]
-    //            && node_y>macro_ly[j]&&node_y<macro_hy[j])
-    //         {
-    //             // logger.info("node %d overlap with macro %d", i, j);
-    //             float distance_to_border_x = 
-    //             min(abs(node_x-macro_lx[j]),abs(macro_hx[j]-node_x));
-    //             float distance_to_border_y = 
-    //             min(abs(node_y-macro_ly[j]),abs(macro_hy[j]-node_y));
-    //             if(macro_die[j]==0)
-    //             {
-    //                 distance0 = min(distance_to_border_x, distance_to_border_y);
-    //             }
-    //             else{
-    //                 distance1 = min(distance_to_border_x, distance_to_border_y);
-    //             }
-    //         }
-    //     }
-    //     if(distance1==0&&distance0==0) continue;
-    //     int die_original = node_die[i].item<int>();
-    //     // logger.info("id: %d, distance1: %f, distance0: %f", i, distance1, distance0);
-    //     if(distance1>0&&distance0>0)
-    //     {
-    //         if(distance1<distance0)
-    //         {
-    //             node_die[i] = 1;
-    //         }else{
-    //             node_die[i] = 0;
-    //         }
-    //     }else if(distance1>0)
-    //     {
-    //         node_die[i] = 0;
-    //     }else if(distance0>0)
-    //     {
-    //         node_die[i] = 1;
-    //     }
-    //     if(die_original!= node_die[i].item<int>())
-    //     {
-    //         change_cnt++;
-    //     }
-    // }
-    // logger.info("%d changed thier die to get better border diatance", change_cnt);
-    /*
-    if (true) {
-        auto node_z_plot = ((node_pos_channel / data.die_info[5]));
-        auto [node_z_plot_sort, tmp] = torch::sort(node_z_plot, 0, false);
-
-        std::filesystem::path eval(std::string("eval"));
-        std::filesystem::path fig_root = logger.res_root / eval;
-        if (!std::filesystem::exists(fig_root)) {
-            std::filesystem::create_directories(fig_root);
-        }
-        plot_pt(node_z_plot_sort,
-                (char *)"plot",
-                (char *)fig_root.string().c_str(),
-                (char *)("pin_pos.png"));
-    }
-    */
 
     /* legalize partition */
     mov_cell_areas = torch::zeros(2, torch::dtype(torch::kLong));
@@ -912,41 +739,6 @@ tuple<torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeData& data_2d) {
                 (mov_cell_areas[0] / max_mov_cell_areas[0]).item<double>(),
                 (mov_cell_areas[1] / max_mov_cell_areas[1]).item<double>());
 
-    // if (true)  { // TODO:
-    //     mov_cell_areas = torch::zeros(2, torch::dtype(torch::kLong));
-    //     for (int i = 0; i < num_nodes; i++) {
-    //         int group = node_die[i].item<int>();
-    //         // TODO: force balance
-    //         if(st::setting.clamp_util) {
-    //             if ((mov_cell_areas[group] + nodes[i]->sizes[group] > max_mov_cell_areas[group]).item<bool>()) group
-    //             = !group;
-    //         }
-    //         mov_cell_areas[group] += nodes[i]->sizes[group];
-    //         nodes[i]->group = group;
-    //         node_die[i] = group;
-    //     }
-    // }
-
-    // data_2d.mov_cell_areas = mov_cell_areas.clone();
-    // logger.info("============ Legalized partition result ============");
-    // // rpt_cut_size();
-    // logger.info("Slice %.2f -> #Cells for each chip (%d, %d)",
-    //             data_2d.tech_ratio.item<float>(),
-    //             (1 - node_die).sum().item<int>(),
-    //             node_die.sum().item<int>());
-    // logger.info("#Cells for each chip (%d, %d)", (1 - node_die).sum().item<int>(), node_die.sum().item<int>());
-    // logger.info("Areas for each chip (%ld, %ld)", (mov_cell_areas[0]).item<long>(),
-    // (mov_cell_areas[1]).item<long>()); logger.info("Utils for each chip (%.2f, %.2f)",
-    //             (mov_cell_areas[0] / max_mov_cell_areas[0]).item<double>(),
-    //             (mov_cell_areas[1] / max_mov_cell_areas[1]).item<double>());
-
-    // if (st::setting.round_recursion == 0) {
-    //     int count = 0;
-    //     for (int i = 0; i < data.num_nodes; i++) {
-    //         count += (node_die[i] != data_2d.node_die[i]).item<int>();
-    //     }
-    //     cout << count << " cells not in its region\n";
-    // }
     data_2d.node_die = node_die.clone();
 
     if (true) {

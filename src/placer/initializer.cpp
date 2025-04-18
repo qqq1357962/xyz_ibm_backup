@@ -199,8 +199,6 @@ void init_params_multi_circuit(torch::Tensor mov_node_pos,
     }
     den_loss = st::setting.num_den_layer == 3 ? (den_losses[0] + den_losses[1] + den_losses[2])
                                               : (den_losses[0] + den_losses[1]);
-    cout << "wl_loss " << wl_loss << endl;
-    cout << "den_loss " << den_loss << endl;
     auto [wl_grad, density_grad] = calc_grad(optimizer, mov_node_pos, wl_loss, den_loss);
     double init_density_weight = (wl_grad.norm(1) / density_grad.norm(1)).detach().item<double>();
 
