@@ -39,7 +39,7 @@ void run_placement_main_multi_circuit() {
     auto [design_info, rawdb, gpdb] = load_dataset();
     NodeData data(design_info, device);
     auto macro_mask_2d = data.macro_mask.clone().unsqueeze(1);
-    data.setMacroOrient_vertical();
+    // data.setMacroOrient_vertical();
     // grad.slice(0, 0, macro_mask_2d.size(0)) *= (1-0.99*macro_mask_2d);
     // for(int i=0;i<data.pin_rel_cpos.size(0);i++)
     // {
@@ -213,9 +213,17 @@ void run_placement_main_multi_circuit() {
                 if (st::setting.patoh_guide_ratio > 1e-3) {
                     pt.run_patoh_area(data);
                 }
-                auto [node_rotate, new_node_pos] = pt.run_gp3d(data);  // second gp in gp3d mode
-                node_rotate = node_rotate + data.node_orient_top;
-                data.setMacroOrient(node_rotate);
+                auto rotate_90 = st::setting.rotate_90 && st::setting.rotate_180;
+                auto [node_rotate, new_node_pos] = pt.run_gp3d(data, rotate_90);  // second gp in gp3d mode
+                auto node_angle = node_rotate + data.node_orient_top;
+                data.setMacroOrient(node_angle);
+                bool contains_one = torch::any(node_rotate == 1).item<bool>();
+                if (contains_one) {
+                    rotate_90 = false;
+                    std::tie(node_rotate, new_node_pos) = pt.run_gp3d(data, rotate_90);
+                    node_angle = node_rotate + data.node_orient_top;
+                    data.setMacroOrient(node_angle);
+                }
                 node_pos = new_node_pos.clone();
                 auto node_die_check2 = pt.node_die.clone();
                 auto node_die_diff = node_die_check.slice(0,data.cell_mov_lhs, data.cell_mov_rhs)^node_die_check2.slice(0,data.cell_mov_lhs, data.cell_mov_rhs);

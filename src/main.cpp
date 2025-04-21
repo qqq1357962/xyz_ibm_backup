@@ -163,6 +163,8 @@ argparse::ArgumentParser get_option(int argc, char* argv[]) {
     parser.add_argument("--second_num_bin_y").default_value(int(1024)).help("").scan<'i', int>();
     parser.add_argument("--die_diff").default_value(double(0.10)).help("two die util difference").scan<'g', double>();
     parser.add_argument("--patoh_guide_ratio").default_value(double(0.00)).help("patoh guide ratio").scan<'g', double>();
+    parser.add_argument("--rotate_180").default_value(string("false")).help("enable 180 degree rotate in 3D GP");
+    parser.add_argument("--rotate_90").default_value(string("false")).help("enable 90 degree rotate in 3D GP");
 
 
     // others

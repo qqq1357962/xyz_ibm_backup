@@ -54,7 +54,7 @@ public:
         if (st::setting.wa_z_model == "xy") {
             net_weight_naive = net_weight;
         }
-        auto [partial_wa_wl, node_grad, partial_hpwl, node_slide_grad] =
+        auto [partial_wa_wl, node_grad, partial_hpwl, node_slide_grad, node_orient_grad] =
             wa_wirelength_hpwl::merged_forward_backward_with_hpwl(node_pos,
                                                                   node_die,
                                                                   pin_id2node_id,
@@ -102,6 +102,8 @@ public:
 
         partial_wa_wl.index({"...", 2}) *= 0;
         partial_hpwl.index({"...", 2}) *= 0;
+
+
 
         // if (st::setting.wa_z_model == "z") {
         //     // auto wa_z_norm_coef =

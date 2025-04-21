@@ -103,6 +103,8 @@ public:
     int global_const;
     double die_diff;
     double patoh_guide_ratio;
+    bool rotate_180 = false;
+    bool rotate_90 = false;
 
     // dp
     bool save_model;

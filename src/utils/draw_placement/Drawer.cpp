@@ -243,20 +243,20 @@ bool Drawer::run(const std::vector<double>& node_pos_x,   // after die scale
             cairo_set_source_rgba(c, 0.01, 0.01, 0.01, 1);
             cairo_fill(c);
         }
-        cairo_rectangle(c, 0,0, 200, 200);
-        // auto node_type = std::make_tuple("show_pos", 0, 0, 0, 1.0);
-        cairo_set_source_rgba(c, 0.01, 0.01, 0.01, 1);
-        cairo_fill(c);
+        // cairo_rectangle(c, 0,0, 200, 200);
+        // // auto node_type = std::make_tuple("show_pos", 0, 0, 0, 1.0);
+        // cairo_set_source_rgba(c, 0.01, 0.01, 0.01, 1);
+        // cairo_fill(c);
         
-        cairo_rectangle(c, 2000,0, 200, 200);
-        // auto node_type = std::make_tuple("show_pos", 0, 0, 0, 1.0);
-        cairo_set_source_rgba(c, 0, 1, 0, 1);
-        cairo_fill(c);
+        // cairo_rectangle(c, 2000,0, 200, 200);
+        // // auto node_type = std::make_tuple("show_pos", 0, 0, 0, 1.0);
+        // cairo_set_source_rgba(c, 0, 1, 0, 1);
+        // cairo_fill(c);
 
-        cairo_rectangle(c, 0,2000, 200, 200);
-        // auto node_type = std::make_tuple("show_pos", 0, 0, 0, 1.0);
-        cairo_set_source_rgba(c, 0, 0.01, 1, 1);
-        cairo_fill(c);
+        // cairo_rectangle(c, 0,2000, 200, 200);
+        // // auto node_type = std::make_tuple("show_pos", 0, 0, 0, 1.0);
+        // cairo_set_source_rgba(c, 0, 0.01, 1, 1);
+        // cairo_fill(c);
     }
 
     cairo_restore(c);

@@ -196,6 +196,8 @@ void Setting::parse(argparse::ArgumentParser args) {
     second_num_bin_y = args.get<int>("--second_num_bin_y");
     die_diff = args.get<double>("--die_diff");
     patoh_guide_ratio = args.get<double>("--patoh_guide_ratio");
+    rotate_180 = str2bool(args.get<std::string>("--rotate_180"));
+    rotate_90 = str2bool(args.get<std::string>("--rotate_90"));
 
     /* others */
     draw_mat_size = args.get<double>("--draw_mat_size");
