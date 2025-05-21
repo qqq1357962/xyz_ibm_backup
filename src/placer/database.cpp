@@ -579,7 +579,72 @@ void NodeData::setMacroOrient() {
 
 void NodeData::setMacroOrient_vertical() {
     int core_dim = core_info[1].item().toInt() >= core_info[3].item().toInt() ? 0 : 1;
-    auto new_orient = torch::ones(node_orient_top.size(0), torch::dtype(torch::kInt)) * macro_mask;
+    auto new_orient = torch::ones(node_orient_top.size(0), torch::dtype(torch::kInt)) * macro_mask * 3;
+    update_macro_orientation(new_orient);
+}
+
+//---------------------------------------------------------------------
+void NodeData::setMacroOrient_default() {
+    int core_dim = core_info[1].item().toInt() >= core_info[3].item().toInt() ? 0 : 1;
+    auto new_orient = node_orient_top.clone();
+
+    std::unordered_map<int, int> type_occurance;
+
+    for(int i = 0 ;i < num_nodes; i++) {
+        if (macro_mask[i].item<int>() == 1) {
+            int macro_dim = node_size[i][0].item().toInt() >= node_size[i][1].item().toInt() ? 0 : 1;
+            if(core_dim != macro_dim) {
+                new_orient[i]=1;
+            }
+            
+            int node_celltypeID = node_type[i].item<int>();
+            if(type_occurance.find(node_celltypeID) != type_occurance.end()) {
+                if(type_occurance[node_celltypeID] %2 == 1) {
+                    // std::cout << i << " " << node_orient_top[i].item<int>() << "\n";
+                    // node_orient_top_a[i] += 2;
+                    // node_orient_bot_a[i] += 2;
+                    new_orient[i] += 2;
+                    // std::cout << i << " " << node_orient_top[i].item<int>() << "\n";
+                }
+                type_occurance[node_celltypeID] = type_occurance[node_celltypeID] + 1;
+            } else {
+                type_occurance[node_celltypeID] = 1;
+            }
+            
+        }
+    }
+    update_macro_orientation(new_orient);
+}
+
+void NodeData::setMacroOrient_ilp() {
+    int core_dim = core_info[1].item().toInt() >= core_info[3].item().toInt() ? 0 : 1;
+    auto new_orient = node_orient_top.clone();
+
+    std::unordered_map<int, int> type_occurance;
+
+    for(int i = 0 ;i < num_nodes; i++) {
+        if (macro_mask[i].item<int>() == 1) {
+            int macro_dim = node_size[i][0].item().toInt() >= node_size[i][1].item().toInt() ? 0 : 1;
+            if(core_dim != macro_dim) {
+                new_orient[i]=1;
+            }
+            
+            int node_celltypeID = node_type[i].item<int>();
+            if(type_occurance.find(node_celltypeID) != type_occurance.end()) {
+                if(type_occurance[node_celltypeID] %2 == 1) {
+                    // std::cout << i << " " << node_orient_top[i].item<int>() << "\n";
+                    // node_orient_top_a[i] += 2;
+                    // node_orient_bot_a[i] += 2;
+                    new_orient[i] += 2;
+                    // std::cout << i << " " << node_orient_top[i].item<int>() << "\n";
+                }
+                type_occurance[node_celltypeID] = type_occurance[node_celltypeID] + 1;
+            } else {
+                type_occurance[node_celltypeID] = 1;
+            }
+            
+        }
+    }
     update_macro_orientation(new_orient);
 }
 
@@ -789,6 +854,12 @@ void NodeData::logging_statistics() {
                 unit_len[1].item<float>());
     logger.info("target density = %.2f", target_density);
     logger.info("cell area = %.2f", __total_mov_area_without_filler__);
+    double macro_area = 0;
+    for (auto macro_id : macro_list) {
+        macro_area += mov_cell_area[macro_id].item<float>();
+    }
+    logger.info("macro num = %d", macro_list.size());
+    logger.info("macro ratio = %.3f", macro_area / __total_mov_area_without_filler__);
     logger.info("node[0] = (%.2f, %.2f)", node_size[0][0].item<float>(), node_size[0][1].item<float>());
     for (auto node_type_indice : node_type_indices) {
         auto [a, b, c] = node_type_indice;

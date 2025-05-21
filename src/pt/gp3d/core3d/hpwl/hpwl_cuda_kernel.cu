@@ -739,7 +739,7 @@ __global__ void wa_wirelength_hpwl_cuda_kernel_with_pin_slide_and_pin_orient(
                         pin_grad[pin_id][c] = grad;
                         if (macro_mask[pin_id2node_id[pin_id]] == 1) {
                             pin_slide[pin_id] += (-1) * grad * long_side_pin_rel_cpos * pin_rel_cpos[pin_id][c];
-                            pin_orient[pin_id] += ((c % 2 == 0) ? -1 : 1) * grad * long_side_pin_rel_cpos * pin_rel_cpos[pin_id][1 - c];
+                            pin_orient[pin_id] += ((c % 2 == 0) ? 1 : -1) * grad * pin_rel_cpos[pin_id][1 - c];
                         }
                     } else {
                         pin_grad[pin_id][c] += w * grad;
@@ -1361,9 +1361,40 @@ __global__ void update_rel_cpos_kernel(
     if (i < num_pins) {
         for (int c = 0; c < 2; c++) {
             int64_t node_id = pin_id2node_id[i];
-            pin_rel_cpos[i][c] = (pin_rel_cpos[i][c] + 1e-3) * ratio_difference[i][c] - 1e-3;
+            pin_rel_cpos[i][c] = pin_rel_cpos[i][c] * ratio_difference[i][c];
             pin_rel_cpos[i][c] = pin_rel_cpos[i][c] * (1 - current_node_slide_state[node_id]) -
                                  pin_rel_cpos[i][c] * current_node_slide_state[node_id] + 1e-3;
+        }
+        // const int c = index & 1;  // channel index
+    }
+}
+
+__global__ void update_rel_cpos_rotate_kernel(
+    torch::PackedTensorAccessor32<float, 2, torch::RestrictPtrTraits> pin_rel_cpos,
+    const torch::PackedTensorAccessor32<int64_t, 1, torch::RestrictPtrTraits> pin_id2node_id,
+    const torch::PackedTensorAccessor32<float, 2, torch::RestrictPtrTraits> ratio_difference,
+    const torch::PackedTensorAccessor32<float, 1, torch::RestrictPtrTraits> current_node_slide_state,
+    const torch::PackedTensorAccessor32<float, 1, torch::RestrictPtrTraits> current_node_rotate_state,
+    const torch::PackedTensorAccessor32<float, 1, torch::RestrictPtrTraits> rotate_direction,
+    int num_pins) {
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
+    // const int i = index >> 1;  // pin index
+    const int i = index;  // pin index
+    if (i < num_pins) {
+        for (int c = 0; c < 2; c++) {
+            int64_t node_id = pin_id2node_id[i];
+            pin_rel_cpos[i][c] = pin_rel_cpos[i][c] * ratio_difference[i][c];
+            pin_rel_cpos[i][c] = pin_rel_cpos[i][c] * (1 - current_node_slide_state[node_id]) -
+                                 pin_rel_cpos[i][c] * current_node_slide_state[node_id] + 1e-3;
+        }
+
+        for (int c = 0; c < 2; c++) {
+            int64_t node_id = pin_id2node_id[i];
+            float rotated_pin_rel_cpos = (c == 0 ? 1 : -1) * pin_rel_cpos[i][1 - c];
+            // float ratio = 1.0 / (1.0 + std::exp(10 * (current_node_rotate_state[node_id] - 0.5)));
+            pin_rel_cpos[i][c] = pin_rel_cpos[i][c] * (1 - current_node_rotate_state[node_id]) +
+                                 rotated_pin_rel_cpos * current_node_rotate_state[node_id];
+            // pin_rel_cpos[i][c] = pin_rel_cpos[i][c] * ratio + rotated_pin_rel_cpos * (1 - ratio);
         }
         // const int c = index & 1;  // channel index
     }
@@ -1414,6 +1445,27 @@ void update_rel_cpos_cuda(torch::Tensor& pin_rel_cpos,
             pin_id2node_id.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
             ratio_difference.packed_accessor32<float, 2, torch::RestrictPtrTraits>(),
             current_node_slide_state.packed_accessor32<float, 1, torch::RestrictPtrTraits>(),
+            num_pins);
+}
+
+void update_rel_cpos_rotate_cuda(torch::Tensor& pin_rel_cpos,
+                     torch::Tensor pin_id2node_id,
+                     torch::Tensor ratio_difference,
+                     torch::Tensor current_node_slide_state,
+                     torch::Tensor current_node_rotate_state,
+                     torch::Tensor rotate_direction)
+{
+    int num_pins = pin_id2node_id.size(0);
+    auto stream = at::cuda::getCurrentCUDAStream();
+    const int threads = 128;
+    const int blocks = (num_pins + threads - 1) / threads;
+    update_rel_cpos_rotate_kernel<<<blocks, threads, 0, stream>>>(
+            pin_rel_cpos.packed_accessor32<float, 2, torch::RestrictPtrTraits>(),
+            pin_id2node_id.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
+            ratio_difference.packed_accessor32<float, 2, torch::RestrictPtrTraits>(),
+            current_node_slide_state.packed_accessor32<float, 1, torch::RestrictPtrTraits>(),
+            current_node_rotate_state.packed_accessor32<float, 1, torch::RestrictPtrTraits>(),
+            rotate_direction.packed_accessor32<float, 1, torch::RestrictPtrTraits>(),
             num_pins);
 }
 

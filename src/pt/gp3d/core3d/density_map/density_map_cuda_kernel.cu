@@ -236,6 +236,247 @@ __global__ void  macro_density_map_cuda_deterministic_forward_kernel(
 }
 
 template <typename scalar_t>
+__global__ void  density_map_macro_overlay_cuda_deterministic_forward_kernel(
+    const torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> normalize_node_info,
+    const torch::PackedTensorAccessor32<scalar_t, 1, torch::RestrictPtrTraits> rotate_rate,
+    const torch::PackedTensorAccessor32<scalar_t, 1, torch::RestrictPtrTraits> unit_len,
+    const torch::PackedTensorAccessor32<int64_t, 1, torch::RestrictPtrTraits> sorted_node_map,
+    unsigned long long *aux_mat,
+    int num_nodes,
+    int num_macros,
+    int num_bin_x,
+    int num_bin_y,
+    int num_bin_z,
+    unsigned long long scalar) {
+    const int index = blockIdx.x * blockDim.z + threadIdx.z;
+    if (index < num_macros) {
+        const int i = (sorted_node_map[index] >= 0) ? sorted_node_map[index] : index;
+        const scalar_t macro_rotate_rate = rotate_rate[i];
+        const scalar_t weight = normalize_node_info[i][6];
+        if (weight > 0) {
+            const scalar_t x_l = normalize_node_info[i][0];
+            const scalar_t x_h = normalize_node_info[i][1];
+            const scalar_t y_l = normalize_node_info[i][2];
+            const scalar_t y_h = normalize_node_info[i][3];
+            const scalar_t z_l = normalize_node_info[i][4];
+            const scalar_t z_h = normalize_node_info[i][5];
+            int x_lf = lround(floor(x_l));
+            int x_hf = lround(floor(x_h));
+            int y_lf = lround(floor(y_l));
+            int y_hf = lround(floor(y_h));
+            int z_lf = lround(floor(z_l));
+            int z_hf = lround(floor(z_h));
+
+            scalar_t x_c = (x_l + x_h) / 2;
+            scalar_t y_c = (y_l + y_h) / 2;
+            scalar_t x_rotate_l = x_c + (y_l - y_c) * unit_len[1] / unit_len[0];
+            scalar_t x_rotate_h = x_c + (y_h - y_c) * unit_len[1] / unit_len[0];
+            scalar_t y_rotate_l = y_c + (x_l - x_c) * unit_len[0] / unit_len[1];
+            scalar_t y_rotate_h = y_c + (x_h - x_c) * unit_len[0] / unit_len[1];
+            int x_rotate_lf = lround(floor(x_rotate_l));
+            int x_rotate_hf = lround(floor(x_rotate_h));
+            int y_rotate_lf = lround(floor(y_rotate_l));
+            int y_rotate_hf = lround(floor(y_rotate_h));
+
+            x_lf = max(x_lf, 0);
+            x_hf = min(x_hf, num_bin_x - 1);
+            y_lf = max(y_lf, 0);
+            y_hf = min(y_hf, num_bin_y - 1);
+            z_lf = max(z_lf, 0);
+            z_hf = min(z_hf, num_bin_z - 1);
+
+            x_rotate_lf = max(x_rotate_lf, 0);
+            x_rotate_hf = min(x_rotate_hf, num_bin_x - 1);
+            y_rotate_lf = max(y_rotate_lf, 0);
+            y_rotate_hf = min(y_rotate_hf, num_bin_y - 1);
+
+
+            for (int j = x_lf + threadIdx.y; j < x_hf + 1; j += blockDim.y) {
+                scalar_t bin_x_l = static_cast<scalar_t>(j);
+                scalar_t overlap_x = overlap(x_l, x_h, bin_x_l);
+                for (int k = y_lf + threadIdx.x; k < y_hf + 1; k += blockDim.x) {
+                    scalar_t bin_y_l = static_cast<scalar_t>(k);
+                    scalar_t overlap_y = overlap(y_l, y_h, bin_y_l);
+                    for (int l = z_lf; l < z_hf + 1; l++) {  // TODO: idx z
+                        scalar_t bin_z_l = static_cast<scalar_t>(l);
+                        scalar_t overlap_z = overlap(z_l, z_h, bin_z_l);
+
+                        scalar_t overlap_area = overlap_x * overlap_y * overlap_z;
+                        // gpuAtomicAdd(&aux_mat[j][k][l], weight * overlap_area
+                        atomicAdd(&aux_mat[j * num_bin_y * num_bin_z + k * num_bin_z +l],
+                            static_cast<unsigned long long>(weight * overlap_area * scalar * (1 - macro_rotate_rate)));
+                    }
+                }
+            }
+
+            for (int j = x_rotate_lf + threadIdx.y; j < x_rotate_hf + 1; j += blockDim.y) {
+                scalar_t bin_x_l = static_cast<scalar_t>(j);
+                scalar_t overlap_x = overlap(x_rotate_l, x_rotate_h, bin_x_l);
+                for (int k = y_rotate_lf + threadIdx.x; k < y_rotate_hf + 1; k += blockDim.x) {
+                    scalar_t bin_y_l = static_cast<scalar_t>(k);
+                    scalar_t overlap_y = overlap(y_rotate_l, y_rotate_h, bin_y_l);
+                    for (int l = z_lf; l < z_hf + 1; l++) {  // TODO: idx z
+                        scalar_t bin_z_l = static_cast<scalar_t>(l);
+                        scalar_t overlap_z = overlap(z_l, z_h, bin_z_l);
+
+                        scalar_t overlap_area = overlap_x * overlap_y * overlap_z;
+                        // gpuAtomicAdd(&aux_mat[j][k][l], weight * overlap_area
+                        atomicAdd(&aux_mat[j * num_bin_y * num_bin_z + k * num_bin_z +l],
+                            static_cast<unsigned long long>(weight * overlap_area * scalar * macro_rotate_rate));
+                    }
+                }
+            }
+        }
+    }
+    else if (index < num_nodes) {
+        const int i = (sorted_node_map[index] >= 0) ? sorted_node_map[index] : index;
+        const scalar_t weight = normalize_node_info[i][6];
+        if (weight > 0) {
+            const scalar_t x_l = normalize_node_info[i][0];
+            const scalar_t x_h = normalize_node_info[i][1];
+            const scalar_t y_l = normalize_node_info[i][2];
+            const scalar_t y_h = normalize_node_info[i][3];
+            const scalar_t z_l = normalize_node_info[i][4];
+            const scalar_t z_h = normalize_node_info[i][5];
+            int x_lf = lround(floor(x_l));
+            int x_hf = lround(floor(x_h));
+            int y_lf = lround(floor(y_l));
+            int y_hf = lround(floor(y_h));
+            int z_lf = lround(floor(z_l));
+            int z_hf = lround(floor(z_h));
+
+            x_lf = max(x_lf, 0);
+            x_hf = min(x_hf, num_bin_x - 1);
+            y_lf = max(y_lf, 0);
+            y_hf = min(y_hf, num_bin_y - 1);
+            z_lf = max(z_lf, 0);
+            z_hf = min(z_hf, num_bin_z - 1);
+
+            for (int j = x_lf + threadIdx.y; j < x_hf + 1; j += blockDim.y) {
+                scalar_t bin_x_l = static_cast<scalar_t>(j);
+                scalar_t overlap_x = overlap(x_l, x_h, bin_x_l);
+                for (int k = y_lf + threadIdx.x; k < y_hf + 1; k += blockDim.x) {
+                    scalar_t bin_y_l = static_cast<scalar_t>(k);
+                    scalar_t overlap_y = overlap(y_l, y_h, bin_y_l);
+                    for (int l = z_lf; l < z_hf + 1; l++) {  // TODO: idx z
+                        scalar_t bin_z_l = static_cast<scalar_t>(l);
+                        scalar_t overlap_z = overlap(z_l, z_h, bin_z_l);
+
+                        scalar_t overlap_area = overlap_x * overlap_y * overlap_z;
+                        // gpuAtomicAdd(&aux_mat[j][k][l], weight * overlap_area
+                        atomicAdd(&aux_mat[j * num_bin_y * num_bin_z + k * num_bin_z +l],
+                            static_cast<unsigned long long>(weight * overlap_area * scalar));
+                    }
+                }
+            }
+        }
+    }
+}
+
+template <typename scalar_t>
+__global__ void __launch_bounds__(256, 4) density_map_macro_vertical_horizontal_overlap_cuda_kernel(
+    const torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> normalize_node_info,
+    const torch::PackedTensorAccessor32<scalar_t, 1, torch::RestrictPtrTraits> rotate_rate,
+    const torch::PackedTensorAccessor32<scalar_t, 1, torch::RestrictPtrTraits> unit_len,
+    const scalar_t *grad_mat,
+    const torch::PackedTensorAccessor32<int64_t, 1, torch::RestrictPtrTraits> sorted_node_map,
+    torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> node_grad,
+    int num_bin_x,
+    int num_bin_y,
+    int num_bin_z,
+    int num_macros) {
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (index < num_macros) {
+        const int i = (sorted_node_map[index] >= 0) ? sorted_node_map[index] : index;
+        const scalar_t weight = normalize_node_info[i][6];
+        const scalar_t macro_rotate_rate = rotate_rate[i];
+        if (weight > 0) {
+            const scalar_t x_l = normalize_node_info[i][0];
+            const scalar_t x_h = normalize_node_info[i][1];
+            const scalar_t y_l = normalize_node_info[i][2];
+            const scalar_t y_h = normalize_node_info[i][3];
+            const scalar_t z_l = normalize_node_info[i][4];
+            const scalar_t z_h = normalize_node_info[i][5];
+            int x_lf = lround(floor(x_l));
+            int x_hf = lround(floor(x_h));
+            int y_lf = lround(floor(y_l));
+            int y_hf = lround(floor(y_h));
+            int z_lf = lround(floor(z_l));
+            int z_hf = lround(floor(z_h));
+
+            scalar_t x_c = (x_l + x_h) / 2;
+            scalar_t y_c = (y_l + y_h) / 2;
+            scalar_t x_rotate_l = x_c + (y_l - y_c) * unit_len[1] / unit_len[0];
+            scalar_t x_rotate_h = x_c + (y_h - y_c) * unit_len[1] / unit_len[0];
+            scalar_t y_rotate_l = y_c + (x_l - x_c) * unit_len[0] / unit_len[1];
+            scalar_t y_rotate_h = y_c + (x_h - x_c) * unit_len[0] / unit_len[1];
+            int x_rotate_lf = lround(floor(x_rotate_l));
+            int x_rotate_hf = lround(floor(x_rotate_h));
+            int y_rotate_lf = lround(floor(y_rotate_l));
+            int y_rotate_hf = lround(floor(y_rotate_h));
+
+            x_lf = max(x_lf, 0);
+            x_hf = min(x_hf, num_bin_x - 1);
+            y_lf = max(y_lf, 0);
+            y_hf = min(y_hf, num_bin_y - 1);
+            z_lf = max(z_lf, 0);
+            z_hf = min(z_hf, num_bin_z - 1);
+
+            x_rotate_lf = max(x_rotate_lf, 0);
+            x_rotate_hf = min(x_rotate_hf, num_bin_x - 1);
+            y_rotate_lf = max(y_rotate_lf, 0);
+            y_rotate_hf = min(y_rotate_hf, num_bin_y - 1);
+
+            scalar_t macro_overlap = 0;
+            scalar_t macro_overlap_90 = 0;
+
+            for (int j = x_lf; j < x_hf + 1; j++) {
+                scalar_t bin_x_l = static_cast<scalar_t>(j);
+                scalar_t overlap_x = overlap(x_l, x_h, bin_x_l);
+                //for (int k = y_lf + threadIdx.x; k < y_hf + 1; k += blockDim.x) {
+                for (int k = y_lf; k < y_hf + 1; k++) {
+                    scalar_t bin_y_l = static_cast<scalar_t>(k);
+                    scalar_t overlap_y = overlap(y_l, y_h, bin_y_l);
+                    for (int l = z_lf; l < z_hf + 1; l++) {  // TODO: idx z
+                        scalar_t bin_z_l = static_cast<scalar_t>(l);
+                        scalar_t overlap_z = overlap(z_l, z_h, bin_z_l);
+
+                        scalar_t overlap_area = overlap_x * overlap_y * overlap_z;
+                        scalar_t tmp = grad_mat[j * num_bin_y * num_bin_z + k * num_bin_z + l];
+                        
+                        // part_grad_x += overlap_area * grad_mat[0][j][k];
+                        // part_grad_y += overlap_area * grad_mat[1][j][k];
+                        macro_overlap += tmp - overlap_area * (1 - macro_rotate_rate);
+                    }
+                }
+            }
+
+            for (int j = x_rotate_lf; j < x_rotate_hf + 1; j++) {
+                scalar_t bin_x_l = static_cast<scalar_t>(j);
+                scalar_t overlap_x = overlap(x_rotate_l, x_rotate_h, bin_x_l);
+                //for (int k = y_lf + threadIdx.x; k < y_hf + 1; k += blockDim.x) {
+                for (int k = y_rotate_lf; k < y_rotate_hf + 1; k++) {
+                    scalar_t bin_y_l = static_cast<scalar_t>(k);
+                    scalar_t overlap_y = overlap(y_rotate_l, y_rotate_h, bin_y_l);
+                    for (int l = z_lf; l < z_hf + 1; l++) {  // TODO: idx z
+                        scalar_t bin_z_l = static_cast<scalar_t>(l);
+                        scalar_t overlap_z = overlap(z_l, z_h, bin_z_l);
+
+                        scalar_t overlap_area = overlap_x * overlap_y * overlap_z;
+                        scalar_t tmp = grad_mat[j * num_bin_y * num_bin_z + k * num_bin_z + l];
+                        
+                        macro_overlap_90 += tmp - overlap_area * macro_rotate_rate;
+                    }
+                }
+            }
+
+            node_grad[i][0] = weight * macro_overlap;
+            node_grad[i][1] = weight * macro_overlap_90;
+        }
+    }
+}
+
+template <typename scalar_t>
 __global__ void __launch_bounds__(256, 4) density_map_cuda_backward_kernel(
     const torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> normalize_node_info,
     const scalar_t *grad_mat,
@@ -336,6 +577,200 @@ __global__ void density_map_cuda_deterministic_backward_kernel(
     int num_nodes) {
     const int index = blockIdx.x * blockDim.x + threadIdx.x;
     if (index < num_nodes) {
+        const int i = (sorted_node_map[index] >= 0) ? sorted_node_map[index] : index;
+        const scalar_t weight = normalize_node_info[i][6];
+        if (weight > 0) {
+            const scalar_t x_l = normalize_node_info[i][0];
+            const scalar_t x_h = normalize_node_info[i][1];
+            const scalar_t y_l = normalize_node_info[i][2];
+            const scalar_t y_h = normalize_node_info[i][3];
+            const scalar_t z_l = normalize_node_info[i][4];
+            const scalar_t z_h = normalize_node_info[i][5];
+            int x_lf = lround(floor(x_l));
+            int x_hf = lround(floor(x_h));
+            int y_lf = lround(floor(y_l));
+            int y_hf = lround(floor(y_h));
+            int z_lf = lround(floor(z_l));
+            int z_hf = lround(floor(z_h));
+
+            x_lf = max(x_lf, 0);
+            x_hf = min(x_hf, num_bin_x - 1);
+            y_lf = max(y_lf, 0);
+            y_hf = min(y_hf, num_bin_y - 1);
+            z_lf = max(z_lf, 0);
+            z_hf = min(z_hf, num_bin_z - 1);
+
+            scalar_t gradX = 0;
+            scalar_t gradY = 0;
+            scalar_t gradZ = 0;
+
+            for (int j = x_lf; j < x_hf + 1; j++) {
+                scalar_t bin_x_l = static_cast<scalar_t>(j);
+                scalar_t overlap_x = overlap(x_l, x_h, bin_x_l);
+                //for (int k = y_lf + threadIdx.x; k < y_hf + 1; k += blockDim.x) {
+                for (int k = y_lf; k < y_hf + 1; k++) {
+                    scalar_t bin_y_l = static_cast<scalar_t>(k);
+                    scalar_t overlap_y = overlap(y_l, y_h, bin_y_l);
+                    for (int l = z_lf; l < z_hf + 1; l++) {  // TODO: idx z
+                        scalar_t bin_z_l = static_cast<scalar_t>(l);
+                        scalar_t overlap_z = overlap(z_l, z_h, bin_z_l);
+
+                        scalar_t overlap_area = overlap_x * overlap_y * overlap_z;
+                        scalar_t tmp_x = grad_mat[0 * num_bin_x * num_bin_y * num_bin_z + j * num_bin_y * num_bin_z +
+                                                  k * num_bin_z + l];
+                        scalar_t tmp_y = grad_mat[1 * num_bin_x * num_bin_y * num_bin_z + j * num_bin_y * num_bin_z +
+                                                  k * num_bin_z + l];
+                        scalar_t tmp_z = grad_mat[2 * num_bin_x * num_bin_y * num_bin_z + j * num_bin_y * num_bin_z +
+                                                  k * num_bin_z + l];
+                        // part_grad_x += overlap_area * grad_mat[0][j][k];
+                        // part_grad_y += overlap_area * grad_mat[1][j][k];
+                        gradX += overlap_area * tmp_x;
+                        gradY += overlap_area * tmp_y;
+                        gradZ += overlap_area * tmp_z;
+                    }
+                }
+            }
+
+            // gpuAtomicAdd(&grad_x[threadIdx.z], part_grad_x);
+            // gpuAtomicAdd(&grad_y[threadIdx.z], part_grad_y);
+            // gpuAtomicAdd(&grad_z[threadIdx.z], part_grad_z);
+            // __syncthreads();
+            node_grad[i][0] = grad_weight * weight * gradX;
+            node_grad[i][1] = grad_weight * weight * gradY;
+            node_grad[i][2] = grad_weight * weight * gradZ;
+            // if (threadIdx.x == 0 && threadIdx.y == 0) {
+                
+            // }
+        }
+    }
+}
+
+template <typename scalar_t>
+__global__ void density_map_overlay_cuda_deterministic_backward_kernel(
+    const torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> normalize_node_info,
+    const scalar_t *grad_mat,
+    const torch::PackedTensorAccessor32<int64_t, 1, torch::RestrictPtrTraits> sorted_node_map,
+    torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> node_grad,
+    const torch::PackedTensorAccessor32<scalar_t, 1, torch::RestrictPtrTraits> rotate_state,
+    const torch::PackedTensorAccessor32<scalar_t, 1, torch::RestrictPtrTraits> unit_len,
+    float grad_weight,
+    int num_bin_x,
+    int num_bin_y,
+    int num_bin_z,
+    int num_nodes,
+    int num_macros) {
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (index < num_macros) {
+        const int i = (sorted_node_map[index] >= 0) ? sorted_node_map[index] : index;
+        const scalar_t weight = normalize_node_info[i][6];
+        const scalar_t macro_rotate_state = rotate_state[i];
+        if (weight > 0) {
+            const scalar_t x_l = normalize_node_info[i][0];
+            const scalar_t x_h = normalize_node_info[i][1];
+            const scalar_t y_l = normalize_node_info[i][2];
+            const scalar_t y_h = normalize_node_info[i][3];
+            const scalar_t z_l = normalize_node_info[i][4];
+            const scalar_t z_h = normalize_node_info[i][5];
+            int x_lf = lround(floor(x_l));
+            int x_hf = lround(floor(x_h));
+            int y_lf = lround(floor(y_l));
+            int y_hf = lround(floor(y_h));
+            int z_lf = lround(floor(z_l));
+            int z_hf = lround(floor(z_h));
+
+            scalar_t x_c = (x_l + x_h) / 2;
+            scalar_t y_c = (y_l + y_h) / 2;
+            scalar_t x_rotate_l = x_c + (y_l - y_c) * unit_len[1] / unit_len[0];
+            scalar_t x_rotate_h = x_c + (y_h - y_c) * unit_len[1] / unit_len[0];
+            scalar_t y_rotate_l = y_c + (x_l - x_c) * unit_len[0] / unit_len[1];
+            scalar_t y_rotate_h = y_c + (x_h - x_c) * unit_len[0] / unit_len[1];
+            int x_rotate_lf = lround(floor(x_rotate_l));
+            int x_rotate_hf = lround(floor(x_rotate_h));
+            int y_rotate_lf = lround(floor(y_rotate_l));
+            int y_rotate_hf = lround(floor(y_rotate_h));
+
+            x_lf = max(x_lf, 0);
+            x_hf = min(x_hf, num_bin_x - 1);
+            y_lf = max(y_lf, 0);
+            y_hf = min(y_hf, num_bin_y - 1);
+            z_lf = max(z_lf, 0);
+            z_hf = min(z_hf, num_bin_z - 1);
+
+            x_rotate_lf = max(x_rotate_lf, 0);
+            x_rotate_hf = min(x_rotate_hf, num_bin_x - 1);
+            y_rotate_lf = max(y_rotate_lf, 0);
+            y_rotate_hf = min(y_rotate_hf, num_bin_y - 1);
+
+            scalar_t gradX = 0;
+            scalar_t gradY = 0;
+            scalar_t gradZ = 0;
+
+            for (int j = x_lf; j < x_hf + 1; j++) {
+                scalar_t bin_x_l = static_cast<scalar_t>(j);
+                scalar_t overlap_x = overlap(x_l, x_h, bin_x_l);
+                //for (int k = y_lf + threadIdx.x; k < y_hf + 1; k += blockDim.x) {
+                for (int k = y_lf; k < y_hf + 1; k++) {
+                    scalar_t bin_y_l = static_cast<scalar_t>(k);
+                    scalar_t overlap_y = overlap(y_l, y_h, bin_y_l);
+                    for (int l = z_lf; l < z_hf + 1; l++) {  // TODO: idx z
+                        scalar_t bin_z_l = static_cast<scalar_t>(l);
+                        scalar_t overlap_z = overlap(z_l, z_h, bin_z_l);
+
+                        scalar_t overlap_area = overlap_x * overlap_y * overlap_z;
+                        scalar_t tmp_x = grad_mat[0 * num_bin_x * num_bin_y * num_bin_z + j * num_bin_y * num_bin_z +
+                                                  k * num_bin_z + l] * (1 - macro_rotate_state);
+                        scalar_t tmp_y = grad_mat[1 * num_bin_x * num_bin_y * num_bin_z + j * num_bin_y * num_bin_z +
+                                                  k * num_bin_z + l] * (1 - macro_rotate_state);
+                        scalar_t tmp_z = grad_mat[2 * num_bin_x * num_bin_y * num_bin_z + j * num_bin_y * num_bin_z +
+                                                  k * num_bin_z + l] * (1 - macro_rotate_state);
+                        // part_grad_x += overlap_area * grad_mat[0][j][k];
+                        // part_grad_y += overlap_area * grad_mat[1][j][k];
+                        gradX += overlap_area * tmp_x;
+                        gradY += overlap_area * tmp_y;
+                        gradZ += overlap_area * tmp_z;
+                    }
+                }
+            }
+
+            for (int j = x_rotate_lf; j < x_rotate_hf + 1; j++) {
+                scalar_t bin_x_l = static_cast<scalar_t>(j);
+                scalar_t overlap_x = overlap(x_rotate_l, x_rotate_h, bin_x_l);
+                for (int k = y_rotate_lf; k < y_rotate_hf + 1; k++) {
+                    scalar_t bin_y_l = static_cast<scalar_t>(k);
+                    scalar_t overlap_y = overlap(y_rotate_l, y_rotate_h, bin_y_l);
+                    for (int l = z_lf; l < z_hf + 1; l++) {  // TODO: idx z
+                        scalar_t bin_z_l = static_cast<scalar_t>(l);
+                        scalar_t overlap_z = overlap(z_l, z_h, bin_z_l);
+
+                        scalar_t overlap_area = overlap_x * overlap_y * overlap_z;
+                        scalar_t tmp_x = grad_mat[0 * num_bin_x * num_bin_y * num_bin_z + j * num_bin_y * num_bin_z +
+                                                  k * num_bin_z + l] * macro_rotate_state;
+                        scalar_t tmp_y = grad_mat[1 * num_bin_x * num_bin_y * num_bin_z + j * num_bin_y * num_bin_z +
+                                                  k * num_bin_z + l] * macro_rotate_state;
+                        scalar_t tmp_z = grad_mat[2 * num_bin_x * num_bin_y * num_bin_z + j * num_bin_y * num_bin_z +
+                                                  k * num_bin_z + l] * macro_rotate_state;
+                        // part_grad_x += overlap_area * grad_mat[0][j][k];
+                        // part_grad_y += overlap_area * grad_mat[1][j][k];
+                        gradX += overlap_area * tmp_x;
+                        gradY += overlap_area * tmp_y;
+                        gradZ += overlap_area * tmp_z;
+                    }
+                }
+            }
+
+            // gpuAtomicAdd(&grad_x[threadIdx.z], part_grad_x);
+            // gpuAtomicAdd(&grad_y[threadIdx.z], part_grad_y);
+            // gpuAtomicAdd(&grad_z[threadIdx.z], part_grad_z);
+            // __syncthreads();
+            node_grad[i][0] = grad_weight * weight * gradX;
+            node_grad[i][1] = grad_weight * weight * gradY;
+            node_grad[i][2] = grad_weight * weight * gradZ;
+            // if (threadIdx.x == 0 && threadIdx.y == 0) {
+                
+            // }
+        }
+    }
+    else if (index < num_nodes) {
         const int i = (sorted_node_map[index] >= 0) ? sorted_node_map[index] : index;
         const scalar_t weight = normalize_node_info[i][6];
         if (weight > 0) {
@@ -682,6 +1117,88 @@ torch::Tensor density_map_cuda_forward(torch::Tensor normalize_node_info,
 
 //---------------------------------------------------------------------
 
+torch::Tensor macro_overlay_density_map_cuda_forward(torch::Tensor normalize_node_info,
+                                       torch::Tensor sorted_node_map,
+                                       torch::Tensor aux_mat,
+                                       torch::Tensor node_rotate_grad,
+                                       torch::Tensor rotate_rate,
+                                       torch::Tensor unit_len,
+                                       int num_bin_x,
+                                       int num_bin_y,
+                                       int num_bin_z,
+                                       int num_nodes,
+                                       int num_macros) {
+    cudaSetDevice(normalize_node_info.get_device());
+    auto stream = at::cuda::getCurrentCUDAStream();
+
+    int thread_count = 64;
+    dim3 blockSize(2, 2, thread_count);
+    int block_count = (num_nodes - 1 + thread_count) / thread_count;
+    
+    bool deterministic = true;
+    int max_value_bits = max(static_cast<int>(ceil(log2((num_bin_x + 0.1) * (num_bin_y + 0.1)))) + 1, 32);
+    int scalar_bits = max(64 - max_value_bits, 0);
+    unsigned long long scalar = (1UL << scalar_bits);
+    float inv_scalar = 1.0 / static_cast<float>(scalar);
+    int num_bin = num_bin_x * num_bin_y * num_bin_z;
+
+    // use cache to save runtime
+    int cp_threads = 512;
+    int cp_blocks = (num_bin + cp_threads - 1) / cp_threads;
+    static unsigned long long *aux_mat_uint64_ptr = nullptr;
+    static int aux_mat_uint64_size = -1;
+    if (aux_mat_uint64_ptr == nullptr) {
+        aux_mat_uint64_size = num_bin;
+        cudaMalloc(&aux_mat_uint64_ptr, aux_mat_uint64_size * sizeof(unsigned long long));
+    } else if (num_bin != aux_mat_uint64_size) {
+        cudaFree(aux_mat_uint64_ptr);
+        aux_mat_uint64_ptr = nullptr;
+        aux_mat_uint64_size = num_bin;
+        cudaMalloc(&aux_mat_uint64_ptr, aux_mat_uint64_size * sizeof(unsigned long long));
+    }
+
+    copyFromFloatAuxMat<<<cp_blocks, cp_threads, 0, stream>>>(
+        aux_mat_uint64_ptr, aux_mat.data_ptr<float>(), scalar, inv_scalar, num_bin);
+    AT_DISPATCH_ALL_TYPES(normalize_node_info.scalar_type(), "density_map_cuda_deterministic_forward", ([&] {
+        density_map_macro_overlay_cuda_deterministic_forward_kernel<scalar_t><<<block_count, blockSize, 0, stream>>>(
+                                normalize_node_info.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
+                                rotate_rate.packed_accessor32<scalar_t, 1, torch::RestrictPtrTraits>(),
+                                unit_len.packed_accessor32<scalar_t, 1, torch::RestrictPtrTraits>(),
+                                sorted_node_map.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
+                                aux_mat_uint64_ptr,
+                                num_nodes,
+                                num_macros,
+                                num_bin_x,
+                                num_bin_y,
+                                num_bin_z,
+                                scalar);
+                        }));
+
+    copyToFloatAuxMat<<<cp_blocks, cp_threads, 0, stream>>>(
+        aux_mat_uint64_ptr, aux_mat.data_ptr<float>(), scalar, inv_scalar, num_bin);
+
+    int threads = 64;
+    int blocks = (num_macros + threads - 1) / threads;
+    AT_DISPATCH_ALL_TYPES(normalize_node_info.scalar_type(), "density_map_cuda_deterministic_forward", ([&] {
+        density_map_macro_vertical_horizontal_overlap_cuda_kernel<scalar_t>
+            <<<blocks, threads, 0, stream>>>(
+                normalize_node_info.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
+                rotate_rate.packed_accessor32<scalar_t, 1, torch::RestrictPtrTraits>(),
+                unit_len.packed_accessor32<scalar_t, 1, torch::RestrictPtrTraits>(),
+                aux_mat.data_ptr<scalar_t>(),
+                sorted_node_map.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
+                node_rotate_grad.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
+                num_bin_x,
+                num_bin_y,
+                num_bin_z,
+                num_macros);
+    }));
+
+    return aux_mat;
+}  // END MODULE
+
+//---------------------------------------------------------------------
+
 torch::Tensor macro_density_map_cuda_forward(torch::Tensor normalize_node_info,
                                        torch::Tensor sorted_node_map,
                                        torch::Tensor aux_mat,
@@ -748,29 +1265,48 @@ torch::Tensor density_map_cuda_backward(torch::Tensor normalize_node_info,
                                         torch::Tensor grad_mat,
                                         torch::Tensor sorted_node_map,
                                         torch::Tensor node_grad,
+                                        torch::Tensor rotate_state,
+                                        torch::Tensor unit_len,
                                         float grad_weight,
                                         int num_bin_x,
                                         int num_bin_y,
                                         int num_bin_z,
-                                        int num_nodes) {
+                                        int num_nodes,
+                                        int num_macros) {
     cudaSetDevice(normalize_node_info.get_device());
     auto stream = at::cuda::getCurrentCUDAStream();
     bool deterministic = true;
     if (deterministic) {
         int threads = 64;
         int blocks = (num_nodes + threads - 1) / threads;
+        // AT_DISPATCH_ALL_TYPES(normalize_node_info.scalar_type(), "density_map_cuda_deterministic_forward", ([&] {
+        //                       density_map_cuda_deterministic_backward_kernel<scalar_t>
+        //                           <<<blocks, threads, 0, stream>>>(
+        //                               normalize_node_info.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
+        //                               grad_mat.data_ptr<scalar_t>(),
+        //                               sorted_node_map.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
+        //                               node_grad.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
+        //                               grad_weight,
+        //                               num_bin_x,
+        //                               num_bin_y,
+        //                               num_bin_z,
+        //                               num_nodes);
+        //                   }));
         AT_DISPATCH_ALL_TYPES(normalize_node_info.scalar_type(), "density_map_cuda_deterministic_forward", ([&] {
-                              density_map_cuda_deterministic_backward_kernel<scalar_t>
+                              density_map_overlay_cuda_deterministic_backward_kernel<scalar_t>
                                   <<<blocks, threads, 0, stream>>>(
                                       normalize_node_info.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
                                       grad_mat.data_ptr<scalar_t>(),
                                       sorted_node_map.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
                                       node_grad.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
+                                      rotate_state.packed_accessor32<scalar_t, 1, torch::RestrictPtrTraits>(),
+                                      unit_len.packed_accessor32<scalar_t, 1, torch::RestrictPtrTraits>(),
                                       grad_weight,
                                       num_bin_x,
                                       num_bin_y,
                                       num_bin_z,
-                                      num_nodes);
+                                      num_nodes,
+                                      num_macros);
                           }));
     } else {
     int thread_count = 64;

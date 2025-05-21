@@ -19,6 +19,25 @@ torch::Tensor density_map_forward(torch::Tensor normalize_node_info,
         normalize_node_info, sorted_node_map, aux_mat, num_bin_x, num_bin_y, num_bin_z, num_nodes);
 }
 
+torch::Tensor macro_overlay_density_map_forward(torch::Tensor normalize_node_info,
+    torch::Tensor sorted_node_map,
+    torch::Tensor aux_mat,
+    torch::Tensor node_rotate_grad,
+    torch::Tensor rotate_rate,
+    torch::Tensor unit_len,
+    int num_bin_x,
+    int num_bin_y,
+    int num_bin_z,
+    int num_nodes,
+    int num_macros) {
+    CHECK_INPUT(normalize_node_info);
+    CHECK_INPUT(sorted_node_map);
+    CHECK_INPUT(aux_mat);
+
+    return macro_overlay_density_map_cuda_forward(
+        normalize_node_info, sorted_node_map, aux_mat, node_rotate_grad, rotate_rate, unit_len, num_bin_x, num_bin_y, num_bin_z, num_nodes, num_macros);
+}
+
 torch::Tensor macro_density_map_forward(torch::Tensor normalize_node_info,
                                   torch::Tensor sorted_node_map,
                                   torch::Tensor aux_mat,
@@ -39,25 +58,32 @@ torch::Tensor density_map_backward(torch::Tensor normalize_node_info,
                                    torch::Tensor grad_mat,
                                    torch::Tensor sorted_node_map,
                                    torch::Tensor node_grad,
+                                   torch::Tensor rotate_state,
+                                   torch::Tensor unit_len,
                                    float grad_weight,
                                    int num_bin_x,
                                    int num_bin_y,
                                    int num_bin_z,
-                                   int num_nodes) {
+                                   int num_nodes,
+                                   int num_macros) {
     CHECK_INPUT(normalize_node_info);
     CHECK_INPUT(grad_mat);
     CHECK_INPUT(sorted_node_map);
     CHECK_INPUT(node_grad);
+    CHECK_INPUT(rotate_state);
 
     return density_map_cuda_backward(normalize_node_info,
                                      grad_mat,
                                      sorted_node_map,
                                      node_grad,
+                                     rotate_state,
+                                     unit_len,
                                      grad_weight,
                                      num_bin_x,
                                      num_bin_y,
                                      num_bin_z,
-                                     num_nodes);
+                                     num_nodes,
+                                     num_macros);
 }
 
 at::Tensor density_map_forward_naive(at::Tensor node_pos,

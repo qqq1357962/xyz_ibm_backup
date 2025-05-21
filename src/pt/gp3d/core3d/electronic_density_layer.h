@@ -29,7 +29,9 @@ public:
         tuple<int, int, std::function<at::Tensor(at::Tensor)>> overflow_helper,
         tuple<at::Tensor, at::Tensor, at::Tensor> sorted_maps,
         bool calc_overflow,
-        at::Tensor macro_mask) {
+        at::Tensor macro_mask,
+        at::Tensor node_rotate_grad,
+        at::Tensor rotate_rate) {
         // Save data for backward in context
         ctx->saved_data["num_bin_x"] = num_bin_x;
         ctx->saved_data["num_bin_y"] = num_bin_y;
@@ -58,15 +60,32 @@ public:
                                                          num_bin_y,
                                                          num_bin_z,
                                                          num_nodes);
+        int macro_num = macro_mask.sum().item<int>();
+        ctx->saved_data["macro_num"] = macro_num;
         if (calc_overflow) {
-            at::Tensor aux_mat = init_density_map.clone();
-            at::Tensor mov_density_map = density_map_forward(normalize_node_info,
-                                                             mov_conn_sorted_map,
-                                                             aux_mat,
-                                                             num_bin_x,
-                                                             num_bin_y,
-                                                             num_bin_z,
-                                                             mov_rhs - mov_lhs);
+            // at::Tensor aux_mat = init_density_map.clone();
+            // at::Tensor mov_density_map = density_map_forward(normalize_node_info,
+            //                                                  mov_conn_sorted_map,
+            //                                                  aux_mat,
+            //                                                  num_bin_x,
+            //                                                  num_bin_y,
+            //                                                  num_bin_z,
+            //                                                  mov_rhs - mov_lhs);
+            
+            at::Tensor aux_mat3 = init_density_map.clone();
+            
+            at::Tensor mov_density_map_macro_overlay = macro_overlay_density_map_forward(normalize_node_info,
+                                                                                         mov_conn_sorted_map,
+                                                                                         aux_mat3,
+                                                                                         node_rotate_grad,
+                                                                                         rotate_rate,
+                                                                                         unit_len,
+                                                                                         num_bin_x,
+                                                                                         num_bin_y,
+                                                                                         num_bin_z,
+                                                                                         mov_rhs - mov_lhs,
+                                                                                         macro_num);
+
             // mov_density_map.mul_(util_weight);  // FIXME:
             // int macro_num = torch::sum(macro_mask).item<int>();
             // at::Tensor aux_mat3 = torch::zeros_like(init_density_map);
@@ -79,7 +98,8 @@ public:
             //                         num_bin_z,
             //                         macro_num,
             //                         mov_rhs - mov_lhs);
-            overflow = overflow_fn(mov_density_map);
+            // overflow = overflow_fn(mov_density_map);
+            overflow = overflow_fn(mov_density_map_macro_overlay);
             // mov_density_map = mov_density_map + marco_density_map;
             at::Tensor aux_mat2 = torch::zeros_like(init_density_map);
             at::Tensor filler_density_map;
@@ -93,9 +113,9 @@ public:
                                                          num_bin_z,
                                                          num_nodes - (mov_rhs - mov_lhs));
                 // cout << filler_density_map.sizes() << endl;
-                density_map = mov_density_map + filler_density_map;
+                density_map = mov_density_map_macro_overlay + filler_density_map;
             } else {
-                density_map = mov_density_map;
+                density_map = mov_density_map_macro_overlay;
             }
             // cout << density_map.min() << endl;
             // cout << density_map.max() << endl;
@@ -123,7 +143,7 @@ public:
         auto [grad_mat, potential_map] = torch_dct_idct(density_map, fft_scale);
 
         auto energy = (potential_map * density_map).sum();
-        ctx->save_for_backward({normalize_node_info, mov_sorted_map, grad_mat, density_weight_local});
+        ctx->save_for_backward({normalize_node_info, mov_sorted_map, grad_mat, density_weight_local, rotate_rate, unit_len});
 
         // FIXME: 4 times smaller than cuda dct
         return {energy, overflow};
@@ -135,12 +155,15 @@ public:
         auto mov_sorted_map = ctx->get_saved_variables()[1];
         auto grad_mat = ctx->get_saved_variables()[2];
         auto density_weight_local = ctx->get_saved_variables()[3];
+        auto rotate_rate = ctx->get_saved_variables()[4];
+        auto unit_len = ctx->get_saved_variables()[5];
         int num_bin_x = ctx->saved_data["num_bin_x"].toInt();
         int num_bin_y = ctx->saved_data["num_bin_y"].toInt();
         int num_bin_z = ctx->saved_data["num_bin_z"].toInt();
         int num_nodes = ctx->saved_data["num_nodes"].toInt();
         int mov_lhs = ctx->saved_data["mov_lhs"].toInt();
         int mov_rhs = ctx->saved_data["mov_rhs"].toInt();
+        int num_macros = ctx->saved_data["macro_num"].toInt();
 
         auto energy_grad_out = grad_outputs[0];
         auto overflow_grad_out = grad_outputs[1];
@@ -161,11 +184,14 @@ public:
                                          grad_mat,
                                          mov_sorted_map,
                                          node_grad,
+                                         rotate_rate,
+                                         unit_len,
                                          grad_weight,
                                          num_bin_x,
                                          num_bin_y,
                                          num_bin_z,
-                                         num_nodes);
+                                         num_nodes,
+                                         num_macros);
 
         node_grad *= density_weight_local.unsqueeze(1);
         // node_grad.index({"...", 2}) *= st::setting.iteration == 0 ? 1 : 1;  // FIXME:
@@ -179,6 +205,8 @@ public:
 
         // Use data saved in forward
         return {node_grad,
+                Variable(),
+                Variable(),
                 Variable(),
                 Variable(),
                 Variable(),
@@ -228,6 +256,8 @@ public:
                           at::Tensor init_density_map,
                           at::Tensor node_weight,
                           at::Tensor macro_mask,
+                          at::Tensor node_rotate_grad,
+                          at::Tensor rotate_rate,
                           bool calc_overflow = true) {
         auto [mov_lhs, mov_rhs, overflow_fn] = overflow_helper;
         auto node_pos_channel = node_pos.index({Slice(mov_lhs, mov_rhs), 2});
@@ -265,7 +295,9 @@ public:
                                                          overflow_helper,
                                                          sorted_maps,
                                                          calc_overflow,
-                                                         macro_mask);
+                                                         macro_mask,
+                                                         node_rotate_grad,
+                                                         rotate_rate);
         return grad_out;
     };
 

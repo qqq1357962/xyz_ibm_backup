@@ -16,7 +16,9 @@ void init_params(torch::Tensor mov_node_pos,
                  ParamScheduler& ps,
                  NodeData3D& data,
                  torch::Tensor node_die_patoh,
-                 torch::Tensor node_slide_state) {
+                 torch::Tensor node_slide_state,
+                 torch::Tensor node_rotate_state,
+                 torch::Tensor rotate_direction) {
     mov_node_pos = trunc_node_pos_fn(mov_node_pos);
     torch::Tensor conn_node_pos = mov_node_pos.index({Slice(mov_lhs, mov_rhs), "..."});
     conn_node_pos = torch::cat({conn_node_pos, conn_fix_node_pos}, 0);
@@ -28,10 +30,11 @@ void init_params(torch::Tensor mov_node_pos,
 
     /* 3 density layers: cell | cell | via */
     vector<torch::Tensor> den_losses(density_map_layers.size());
+    auto node_rotate_grad = torch::zeros({data.cell_mov_rhs - data.cell_mov_lhs, 2}, mov_node_pos.options());
     for (int i = 0; i < density_map_layers.size(); i++) {
         node_weight = data.mov_node_weights[i];
 
-        auto den_val_list = density_map_layers[i].forward(mov_node_pos, mov_node_size, init_density_map, node_weight, data.macro_mask);
+        auto den_val_list = density_map_layers[i].forward(mov_node_pos, mov_node_size, init_density_map, node_weight, data.macro_mask, node_rotate_grad, node_rotate_state);
         if (!i) {
             den_loss = den_val_list[0];
             overflow = den_val_list[1];
@@ -60,6 +63,8 @@ void init_params(torch::Tensor mov_node_pos,
                                                       data.macro_mask,
                                                       node_die_patoh,
                                                       node_slide_state,
+                                                      node_rotate_state,
+                                                      rotate_direction,
                                                       data.die_info,
                                                       node_die);
     auto wl_loss = wl_val_list[0];

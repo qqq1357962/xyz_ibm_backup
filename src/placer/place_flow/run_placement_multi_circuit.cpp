@@ -39,7 +39,7 @@ void run_placement_main_multi_circuit() {
     auto [design_info, rawdb, gpdb] = load_dataset();
     NodeData data(design_info, device);
     auto macro_mask_2d = data.macro_mask.clone().unsqueeze(1);
-    // data.setMacroOrient_vertical();
+    // data.setMacroOrient_default();
     // grad.slice(0, 0, macro_mask_2d.size(0)) *= (1-0.99*macro_mask_2d);
     // for(int i=0;i<data.pin_rel_cpos.size(0);i++)
     // {
@@ -213,15 +213,24 @@ void run_placement_main_multi_circuit() {
                 if (st::setting.patoh_guide_ratio > 1e-3) {
                     pt.run_patoh_area(data);
                 }
+                else {
+                    data.node_die = torch::rand({data.cell_mov_rhs - data.cell_mov_lhs}).round().to(torch::kInt);
+                }
                 auto rotate_90 = st::setting.rotate_90 && st::setting.rotate_180;
-                auto [node_rotate, new_node_pos] = pt.run_gp3d(data, rotate_90);  // second gp in gp3d mode
-                auto node_angle = node_rotate + data.node_orient_top;
+                auto node_orient_back_up = data.node_orient_top.clone();
+                auto stop_overflow_3d_back_up = st::setting.stop_overflow_3d;
+                // if (rotate_90) {
+                //     st::setting.stop_overflow_3d = 0.2;
+                // }
+                torch::Tensor macro_indices = torch::nonzero(data.macro_mask).squeeze();
+                auto [node_rotate, new_node_pos, node_rotate90_tend] = pt.run_gp3d(data, rotate_90);  // second gp in gp3d mode
+                auto node_angle = (node_rotate + data.node_orient_top) % 4;
                 data.setMacroOrient(node_angle);
-                bool contains_one = torch::any(node_rotate == 1).item<bool>();
-                if (contains_one) {
+                if (rotate_90) {
                     rotate_90 = false;
-                    std::tie(node_rotate, new_node_pos) = pt.run_gp3d(data, rotate_90);
-                    node_angle = node_rotate + data.node_orient_top;
+                    st::setting.stop_overflow_3d = stop_overflow_3d_back_up;
+                    std::tie(node_rotate, new_node_pos, node_rotate90_tend) = pt.run_gp3d(data, rotate_90);
+                    node_angle = (node_rotate + data.node_orient_top) % 4;
                     data.setMacroOrient(node_angle);
                 }
                 node_pos = new_node_pos.clone();
@@ -671,6 +680,7 @@ void run_placement_main_multi_circuit() {
             dp_db.xh = via_data.core_info[1].item<float>();
             dp_db.yl = via_data.core_info[2].item<float>();
             dp_db.yh = via_data.core_info[3].item<float>();
+            dp_db.num_movable_nodes = data.num_nodes;
 
             dp_db.via_dp = via_dp;
             dp_db.i_bgn = via_dp ? dp_db.num_movable_nodes : 0;

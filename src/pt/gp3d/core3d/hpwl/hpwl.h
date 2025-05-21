@@ -46,6 +46,13 @@ void update_rel_cpos(torch::Tensor& pin_rel_cpos,
                      torch::Tensor ratio_difference,
                      torch::Tensor current_node_slide_state);
 
+void update_rel_cpos_rotate(torch::Tensor& pin_rel_cpos,
+                            torch::Tensor pin_id2node_id,
+                            torch::Tensor ratio_difference,
+                            torch::Tensor current_node_slide_state,
+                            torch::Tensor current_node_rotate_state,
+                            torch::Tensor rotate_direction);
+
 void force_remove_overlap(std::vector<int> macro_list, torch::Tensor& node_pos, int num_macros, torch::Tensor node_size);
 
 torch::Tensor masked_scale_hpwl(torch::Tensor node_pos,

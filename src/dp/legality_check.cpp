@@ -61,20 +61,26 @@ bool siteAlignmentCheck(const DetailedPlaceData& db, float scale_factor, int num
         int site_id = floorDivRound(node_xl - db.xl, db.site_width, db.site_width_safe_divide);
         float site_xl = db.xl + db.site_width * site_id;
         float site_xh = site_xl + db.site_width;
-        if (std::abs(site_id_f - site_id) > precision) {
-            logger.error(
-                "node %d (%g, %g) failed to align to row %d (%g, %g) and site %d (%g, %g)(%f, %f)",
-                i,
-                node_xl,
-                node_yl,
-                row_id,
-                row_yl,
-                row_yh,
-                site_id,
-                site_xl,
-                site_xh,
-                site_id_f,
-                db.xl);
+        // if (std::abs(site_id_f - site_id) > precision) {
+        if (std::abs(double(node_xl - site_xl)) > double(db.site_width) * double(precision)) {
+            cout << node_xl << endl;
+            cout << site_xl << endl;
+            cout << db.site_width << endl;
+            cout << precision << endl;
+            cout << std::abs(double(node_xl - site_xl)) << endl;
+            cout << double(db.site_width) * double(precision) << endl;
+            logger.error("node %d (%g, %g) failed to align to row %d (%g, %g) and site %d (%g, %g)(%f, %f)",
+                         i,
+                         node_xl,
+                         node_yl,
+                         row_id,
+                         row_yl,
+                         row_yh,
+                         site_id,
+                         site_xl,
+                         site_xh,
+                         site_id_f,
+                         db.xl);
             legal_flag = false;
         }
     }

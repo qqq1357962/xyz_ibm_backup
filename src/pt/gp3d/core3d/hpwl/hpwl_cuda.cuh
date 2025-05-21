@@ -26,6 +26,13 @@ void update_rel_cpos_cuda(torch::Tensor& pin_rel_cpos,
                      torch::Tensor ratio_difference,
                      torch::Tensor current_node_slide_state);
 
+void update_rel_cpos_rotate_cuda(torch::Tensor& pin_rel_cpos,
+                                 torch::Tensor pin_id2node_id,
+                                 torch::Tensor ratio_difference,
+                                 torch::Tensor current_node_slide_state,
+                                 torch::Tensor current_node_rotate_state,
+                                 torch::Tensor rotate_direction);
+
 torch::Tensor masked_scale_hpwl_sum_cuda(torch::Tensor node_pos,
                                          torch::Tensor pin_id2node_id,
                                          torch::Tensor pin_rel_cpos,

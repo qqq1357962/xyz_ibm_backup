@@ -25,6 +25,8 @@ public:
                                  at::Tensor macro_mask,
                                  at::Tensor node_die_patoh,
                                  at::Tensor current_node_slide_state,
+                                 at::Tensor current_node_rotate_state,
+                                 at::Tensor rotate_direction,
                                  at::Tensor die_info = torch::empty({0}),
                                  at::Tensor node_die = torch::empty({0})) {
         // Save data for backward in context
@@ -48,7 +50,7 @@ public:
         ratio_multiply = (node_die_patoh - (node_die_patoh.max() + node_die_patoh.min()) / 2).to(ratio_difference_area.options());
         // cout << ratio_multiply << endl;
         
-        wa_wirelength_hpwl::update_rel_cpos(pin_rel_cpos, pin_id2node_id, pin_rel_cpos_difference, current_node_slide_state);
+        wa_wirelength_hpwl::update_rel_cpos_rotate(pin_rel_cpos, pin_id2node_id, pin_rel_cpos_difference, current_node_slide_state, current_node_rotate_state, rotate_direction);
 
         auto net_weight_naive = torch::ones({net_weight.size(0)}, dtype(torch::kFloat)).to(net_weight.device());
         if (st::setting.wa_z_model == "xy") {
@@ -141,7 +143,7 @@ public:
         //     // logger.info("%d/%d cells are optimal", node_optim_info.sum().item<int>(), node_optim_info.size(0));
         // }
 
-        return {torch::sum(partial_wa_wl), sum_hpwl, node_slide_grad};
+        return {torch::sum(partial_wa_wl), sum_hpwl, node_slide_grad, node_orient_grad};
     }
 
     static variable_list backward(AutogradContext *ctx, variable_list grad_outputs) {
@@ -154,6 +156,8 @@ public:
         // node_grad.index({"...", Slice(0, 2)}) *= st::setting.iteration == 0 ? 1 : st::setting.force_coeff_2d;  // FIXME:
 
         return {node_grad * wa_grad_out,
+                Variable(),
+                Variable(),
                 Variable(),
                 Variable(),
                 Variable(),

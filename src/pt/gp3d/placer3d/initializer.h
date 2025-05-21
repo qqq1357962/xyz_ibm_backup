@@ -20,7 +20,9 @@ void init_params(torch::Tensor mov_node_pos,
                  ParamScheduler& ps,
                  NodeData3D& data,
                  torch::Tensor node_die_patoh,
-                 torch::Tensor node_slide_state);
+                 torch::Tensor node_slide_state,
+                 torch::Tensor current_rotate_state,
+                 torch::Tensor rotate_direction);
 
 double estimate_initial_learning_rate(
     const std::function<std::tuple<torch::Tensor, torch::Tensor>(torch::Tensor)>& obj_and_grad_fn,

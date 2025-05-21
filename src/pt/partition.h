@@ -272,7 +272,7 @@ public:
     /* GP2D */
     torch::Tensor run_gp2d(NodeData& data);
     torch::Tensor run_gp2d_grid(NodeData& data);
-    tuple<torch::Tensor, torch::Tensor> run_gp3d(NodeData& data, bool rotate_90);
+    tuple<torch::Tensor, torch::Tensor, torch::Tensor> run_gp3d(NodeData& data, bool rotate_90);
 
     void run_patoh_grided(NodeData &data, torch::Tensor node_pos);
     void run_patoh_mononlithic(NodeData &data, torch::Tensor node_pos);

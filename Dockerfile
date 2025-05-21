@@ -1,0 +1,12 @@
+FROM ubuntu:latest
+
+RUN apt-get update && apt-get install -y
+
+
+WORKDIR /app
+
+COPY . .
+
+RUN mkdir build && cd build && cmake .. && make
+
+CMD ["./place --output_path output_openroad/swerv_wrapper --load_from_raw true --dataset openroad --design_name swerv_wrapper --version 23 --num_threads 8 --gpu 0 --partitioner gp3d --num_bin_x 512 --num_bin_y 512 --num_bin_z 16 --dp true --lg true --pp false --draw_placement true --num_den_layer 3 --force_coeff_2d 1 --round_recursion 0 --omni_int 1 --eval_params 0 --inner_iter 5000 --inner_iter_gp3d 5000 --use_pre_gp 1 --stack_cells 1 --num_bin_3d 1024 --cut_net_thres 8 --net_weight_coef 1 --net_weight_offset -0.05 --stop_overflow_3d 0.06 --quad_penalty 1 --wa_coeff 2 --density_weight 8e-5 --density_weight_coef 1.05 --magic_hpwl 70000 --sideline 0 --fp false --lr 1 --gp_padding 0.03 --is_move_macro_3d true --is_fp_permit_change_cross_chip true --num_part 1 --min_gp_step 0 --skip_hpwl_fm false --adjust_macro true --kernel_size 1 --enable_rotate_in_gp false --ignore_net_degree 100 --half_filler_height true --die_diff 0.3 --rotate_180 true --rotate_90 true"]

@@ -16,6 +16,7 @@ benchmarks/*.txt
 *.txt
 *.out
 *.log
+*.zip
 
 # result
 results/
@@ -26,6 +27,7 @@ run
 
 # thirdparty
 thirdparty/
+thirdparty*/
 
 # verify
 verify/

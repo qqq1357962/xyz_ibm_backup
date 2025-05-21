@@ -32,7 +32,7 @@ void apply_precond(torch::Tensor mov_node_pos, ParamScheduler& ps) {
 }
 
 // For Nesterov
-tuple<torch::Tensor, torch::Tensor, torch::Tensor> calc_obj_and_grad(torch::Tensor mov_node_pos,
+tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> calc_obj_and_grad(torch::Tensor mov_node_pos,
                                                       std::function<torch::Tensor(torch::Tensor)> constraint_fn,
                                                       torch::Tensor mov_node_size,
                                                       torch::Tensor init_density_map,
@@ -42,7 +42,11 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> calc_obj_and_grad(torch::Tens
                                                       ParamScheduler& ps,
                                                       NodeData3D& data,
                                                       torch::Tensor node_die_patoh,
-                                                      torch::Tensor current_node_slide_state) {
+                                                      torch::Tensor current_node_slide_state,
+                                                      torch::Tensor current_rotate_state,
+                                                      torch::Tensor current_mov_node_size,
+                                                      torch::Tensor node_to_num_pins,
+                                                      torch::Tensor rotate_direction) {
     // we disable merged_forward_backward in C++ version since it is quite complicated
     auto [mov_lhs, mov_rhs] = data.movable_index;
     mov_rhs = data.iopin_mov_lhs;
@@ -59,18 +63,21 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> calc_obj_and_grad(torch::Tens
     // TODO:
     torch::Tensor node_weight;
     torch::Tensor den_loss;
+    auto node_rotate_grad = torch::zeros({data.cell_mov_rhs - data.cell_mov_lhs, 2}, mov_node_pos.options());
+    auto overflow_overall = torch::zeros({2}, mov_node_pos.options());
 
     /* 2 density layers: cell | cell | via */
     density_map_layers[0].density_weight_local = ps.density_weight_local.to(mov_node_pos.device());
     vector<torch::Tensor> den_losses(density_map_layers.size());
     for (int i = 0; i < density_map_layers.size(); i++) {
         node_weight = data.mov_node_weights[i];
-        auto den_val_list = density_map_layers[i].forward(mov_node_pos, mov_node_size, init_density_map, node_weight, data.macro_mask);
+        auto den_val_list = density_map_layers[i].forward(mov_node_pos, mov_node_size, init_density_map, node_weight, data.macro_mask, node_rotate_grad, current_rotate_state);
         if (!i) {
             den_loss = den_val_list[0];
         } else {
             den_loss += den_val_list[0];
         }
+        overflow_overall = den_val_list[1].clone();
     }
 
     auto node_die = 1 - density_map_layers[0].node_die.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs)}).clone();
@@ -93,6 +100,8 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> calc_obj_and_grad(torch::Tens
                                                       data.macro_mask,
                                                       node_die_patoh,
                                                       current_node_slide_state,
+                                                      current_rotate_state,
+                                                      rotate_direction,
                                                       data.die_info,
                                                       node_die);
 
@@ -104,10 +113,47 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> calc_obj_and_grad(torch::Tens
     // mov_node_pos.index(rhs...)mutable_grad().index({"...", Slice(0, 2)}) *= st::setting.force_coeff_2d;
     // if (data.node_wgt_grad.numel()) mov_node_pos.mutable_grad() *= data.node_wgt_grad.unsqueeze(1).to(mov_node_pos.device());
     
+    auto current_mov_node_length = torch::sqrt(current_mov_node_size.select(1, 0) * current_mov_node_size.select(1, 1));
+    auto current_mov_node_area = current_mov_node_size.select(1, 0) * current_mov_node_size.select(1, 1);
     torch::Tensor grad = mov_node_pos.grad();
-    torch::Tensor node_slide_grad = wl_val_list[2];
+    torch::Tensor node_slide_grad = wl_val_list[2] / current_mov_node_length;
+    torch::Tensor wl_node_orient_grad = wl_val_list[3];
+    torch::Tensor density_node_orient_grad = node_rotate_grad.select(1, 0) - node_rotate_grad.select(1, 1);
+    torch::Tensor node_orient_grad = torch::zeros_like(wl_node_orient_grad);
 
-    return {loss, grad, node_slide_grad};
+    // auto non_zero_indices = torch::nonzero(node_slide_grad);
+    // auto non_zero_num = torch::count_nonzero(node_slide_grad).item<int>();
+    // for (int i = 0; i < non_zero_num; i++) {
+    //     cout << node_area_per_pin[non_zero_indices[i].item<int>()].item<float>() << " ";
+    // }
+    // cout << endl;
+
+    if (st::setting.loss_type == "weighted_sum") {
+        node_orient_grad = (wl_node_orient_grad + ps.density_weight * density_node_orient_grad) / (1 + ps.density_weight);
+        auto norm_grad = (current_mov_node_length + ps.density_weight * current_mov_node_area) / (1 + ps.density_weight);
+        node_orient_grad = node_orient_grad / norm_grad;
+    } else if (st::setting.loss_type == "direct") {
+        node_orient_grad = wl_node_orient_grad + ps.density_weight * density_node_orient_grad;
+        auto norm_grad = current_mov_node_length + ps.density_weight * current_mov_node_area;
+        node_orient_grad = node_orient_grad / norm_grad;
+    } else if (st::setting.loss_type == "den_only") {
+        node_orient_grad = density_node_orient_grad;
+        auto norm_grad = current_mov_node_area;
+        node_orient_grad = node_orient_grad / norm_grad;
+    } else if (st::setting.loss_type == "wl_only") {
+        node_orient_grad = wl_node_orient_grad;
+        auto norm_grad = current_mov_node_length;
+        node_orient_grad = node_orient_grad / norm_grad;
+    }
+    node_orient_grad = (node_orient_grad / 30).clamp(-0.5, 0.5);
+    // auto non_zero_indices = torch::nonzero(node_orient_grad);
+    // auto non_zero_num = torch::count_nonzero(node_orient_grad).item<int>();
+    // for (int i = 0; i < non_zero_num; i++) {
+    //     cout << node_orient_grad[non_zero_indices[i].item<int>()].item<float>() << " ";
+    // }
+    // cout << endl;
+
+    return {loss, grad, node_slide_grad, node_orient_grad, overflow_overall};
 }
 
 tuple<torch::Tensor, torch::Tensor> calc_grad(torch::optim::Optimizer& optimizer,
