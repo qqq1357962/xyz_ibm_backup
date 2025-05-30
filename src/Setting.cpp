@@ -23,6 +23,8 @@ void Setting::parse(argparse::ArgumentParser args) {
     load_stage = args.get<std::string>("--load_stage");
     load_file = args.get<std::string>("--load_file");
     load_json = args.get<std::string>("--load_json");
+    load_def_template = args.get<std::string>("--load_def_template");
+    output_def = args.get<std::string>("--output_def");
     if(args.get<std::string>("--fp")=="true")
     {
          use_floorplan=1;
@@ -196,8 +198,13 @@ void Setting::parse(argparse::ArgumentParser args) {
     second_num_bin_y = args.get<int>("--second_num_bin_y");
     die_diff = args.get<double>("--die_diff");
     patoh_guide_ratio = args.get<double>("--patoh_guide_ratio");
+
+    
     rotate_180 = str2bool(args.get<std::string>("--rotate_180"));
     rotate_90 = str2bool(args.get<std::string>("--rotate_90"));
+    rotate_type = args.get<std::string>("--rotate_type");
+    rotate_thre = args.get<double>("--rotate_thre");
+    rotate_coef = args.get<int>("--rotate_coef");
 
     /* others */
     draw_mat_size = args.get<double>("--draw_mat_size");

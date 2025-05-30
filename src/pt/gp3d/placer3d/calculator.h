@@ -26,8 +26,8 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
                                                       NodeData3D& data,
                                                       torch::Tensor node_die_patoh,
                                                       torch::Tensor current_node_slide_state,
-                                                      torch::Tensor current_rotate_state,
+                                                      torch::Tensor current_node_orient_state,
                                                       torch::Tensor current_mov_node_size,
                                                       torch::Tensor node_to_num_pins,
-                                                      torch::Tensor rotate_direction);
+                                                      bool rotate_90);
 }  // namespace GP3D

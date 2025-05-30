@@ -17,8 +17,8 @@ void init_params(torch::Tensor mov_node_pos,
                  NodeData3D& data,
                  torch::Tensor node_die_patoh,
                  torch::Tensor node_slide_state,
-                 torch::Tensor node_rotate_state,
-                 torch::Tensor rotate_direction) {
+                 torch::Tensor node_orient_state,
+                 bool rotate_90) {
     mov_node_pos = trunc_node_pos_fn(mov_node_pos);
     torch::Tensor conn_node_pos = mov_node_pos.index({Slice(mov_lhs, mov_rhs), "..."});
     conn_node_pos = torch::cat({conn_node_pos, conn_fix_node_pos}, 0);
@@ -34,7 +34,7 @@ void init_params(torch::Tensor mov_node_pos,
     for (int i = 0; i < density_map_layers.size(); i++) {
         node_weight = data.mov_node_weights[i];
 
-        auto den_val_list = density_map_layers[i].forward(mov_node_pos, mov_node_size, init_density_map, node_weight, data.macro_mask, node_rotate_grad, node_rotate_state);
+        auto den_val_list = density_map_layers[i].forward(mov_node_pos, mov_node_size, init_density_map, node_weight, data.macro_mask, node_rotate_grad, node_orient_state);
         if (!i) {
             den_loss = den_val_list[0];
             overflow = den_val_list[1];
@@ -58,13 +58,13 @@ void init_params(torch::Tensor mov_node_pos,
                                                       data.net_mask, 
                                                       data.net_weight * ps.net_weight_coef,
                                                       ps.wa_coeff,
+                                                      rotate_90,
                                                       data.hpwl_scale,
                                                       density_map_layers[0].ratio_difference,
                                                       data.macro_mask,
                                                       node_die_patoh,
                                                       node_slide_state,
-                                                      node_rotate_state,
-                                                      rotate_direction,
+                                                      node_orient_state,
                                                       data.die_info,
                                                       node_die);
     auto wl_loss = wl_val_list[0];

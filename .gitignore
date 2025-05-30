@@ -12,7 +12,6 @@ cmake/
 data/
 data_*/
 benchmarks/*.txt
-*.sh
 *.txt
 *.out
 *.log

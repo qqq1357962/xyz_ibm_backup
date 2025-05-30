@@ -53,6 +53,32 @@ string getOrient(bool flipX, bool flipY) {
     }
 }
 
+string getOrient(int orient) {
+    // 0:N, 1:W, 2:S, 3:E, 4:FN, 5:FW, 6:FS, 7:FE, -1:NONE
+    switch (orient) {
+        case 0:
+            return "N";
+        case 1:
+            return "W";
+        case 2:
+            return "S";
+        case 3:
+            return "E";
+        case 4:
+            return "FN";
+        case 5:
+            return "FW";
+        case 6:
+            return "FS";
+        case 7:
+            return "FE";
+        case -1:
+            return "NONE";
+        default:
+            return "N";
+    }
+}
+
 #define DIR_UP 1
 #define DIR_DOWN 2
 #define DIR_LEFT 4
@@ -404,6 +430,141 @@ bool Database::writeComponents(ofstream& ofs) {
     return true;
 }
 
+string expand_name(const string& name) {
+    // add '\' before '[' or ']'
+    string result;
+    for (char c : name) {
+        if (c == '[' || c == ']') {
+            result.push_back('\\');
+        }
+        result.push_back(c);
+    }
+    return result;
+}
+
+bool Database::writeComponents(ofstream& ofs, const std::vector<int> node_selected) {
+    int nCells = cells.size();
+    ofs << "COMPONENTS " << nCells << " ;" << endl;
+    // ofs << "COMPONENTS " << nCells << " ;" << endl;
+    for (int i = 0; i < nCells; i++) {
+        Cell* cell = cells[i];
+        if (node_selected[cell->gpdb_id] == 1) {
+#ifdef WRITE_BUFFER
+        ostringstream oss;
+#else
+        ofstream& oss = ofs;
+#endif
+            // const string& cellName = expand_name(cell->name());
+            oss << "   - " << expand_name(cell->name()) << " " << cell->ctype()->name;
+            // ofs << "   - " << cell->name() << " " << cell->ctype()->name << endl;
+            if (cell->fixed()) {
+                oss << " + FIXED ( " << cell->lx() << " " << cell->ly() << " ) " << getOrient(cell->orient()) << " ;"
+                    << endl;
+                // ofs << "      + FIXED ( " << cell->lx() << " " << cell->ly() << " ) "
+                //    << getOrient(cell->orient())
+                //    << " ;" << endl;
+            } else if (cell->placed()) {
+                oss << " + PLACED ( " << static_cast<int>(cell->lx()) << " " << static_cast<int>(cell->ly()) << " ) " << getOrient(cell->orient()) << " ;"
+                    << endl;
+                // ofs << "      + PLACED ( " << cell->lx() << " " << cell->ly() << " ) "
+                //    << getOrient(cell->orient())
+                //    << " ;" << endl;
+            } else {
+                oss << " ;" << endl;
+                // ofs << "      + UNPLACED ;" << endl;
+            }
+#ifdef WRITE_BUFFER
+        string lines = oss.str();
+        writeBuffer(ofs, lines);
+#endif
+        }
+    }
+#ifdef WRITE_BUFFER
+    writeBufferFlush(ofs);
+#endif
+    ofs << "END COMPONENTS\n";
+    return true;
+}
+
+bool Database::writeNets(ofstream& ofs, const std::vector<int> node_selected) {
+    int nNets = nets.size();
+    int net_num = 0;
+    for (int i = 0; i < nNets; i++) {
+        Net* net = nets[i];
+        for (Pin* pin : net->pins) {
+            if ((pin->iopin && (pin->iopin->name.substr(0, 3) == "clk" || pin->iopin->name.substr(0, 5) == "clock" || node_selected[pin->iopin->gpdb_id] == 1)) || (pin->cell && node_selected[pin->cell->gpdb_id] == 1)) {
+                net_num++;
+                break;
+            }
+        }
+    }
+    ofs << "NETS " << net_num << " ;" << endl;
+    for (int i = 0; i < nNets; i++) {
+        Net* net = nets[i];
+        ofstream& oss = ofs;
+        bool have_pin = false;
+        for (Pin* pin : net->pins) {
+            if ((pin->iopin && (pin->iopin->name.substr(0, 3) == "clk" || pin->iopin->name.substr(0, 5) == "clock" || node_selected[pin->iopin->gpdb_id] == 1)) || (pin->cell && node_selected[pin->cell->gpdb_id] == 1)) {
+                have_pin = true;
+                break;
+            }
+            // if (pin->cell && node_selected[pin->cell->gpdb_id] == 1) {
+            //     have_pin = true;
+            //     break;
+            // }
+        }
+        if (have_pin) {
+            oss << "   - " << expand_name(net->name);
+            for (Pin* pin : net->pins) {
+                if (pin->iopin && (pin->iopin->name.substr(0, 3) == "clk" || pin->iopin->name.substr(0, 5) == "clock" || node_selected[pin->iopin->gpdb_id] == 1)) oss << " ( PIN " << pin->type->name() << " )";
+                else if (pin->cell && node_selected[pin->cell->gpdb_id] == 1) oss << " ( " << expand_name(pin->cell->name()) << " " << pin->type->name() << " )";
+                // if (pin->cell && node_selected[pin->cell->gpdb_id] == 1) oss << " ( " << expand_name(pin->cell->name()) << " " << pin->type->name() << " )";
+            }
+            oss << " + USE SIGNAL ;\n";
+        }
+        
+    }
+
+    ofs << "END NETS\n";
+    return true;
+}
+
+bool Database::writePins(ofstream& ofs, const std::vector<int> node_selected) {
+    int pin_num = 0;
+    for (IOPin* iopin : iopins) {
+        if (node_selected[iopin->gpdb_id] == 1 || iopin->name.substr(0, 3) == "clk" || iopin->name.substr(0, 5) == "clock") {
+            pin_num++;
+        }
+    }
+    ofs << "PINS " << pin_num << " ;\n";
+    for (IOPin* iopin : iopins) {
+        if (node_selected[iopin->gpdb_id] == 1 || iopin->name.substr(0, 3) == "clk" || iopin->name.substr(0, 5) == "clock") {
+            ofs << "\t- " << iopin->name << " + NET " << iopin->netName();
+            switch (iopin->type->direction()) {
+                case 'f':
+                    ofs << " + DIRECTION FEEDTHRU + USE SIGNAL";
+                    break;
+                case 'i':
+                    ofs << " + DIRECTION OUTPUT + USE SIGNAL";
+                    break;
+                case 'o':
+                    ofs << " + DIRECTION INPUT + USE SIGNAL";
+                    break;
+                case 'x':
+                    ofs << " + DIRECTION INOUT + USE SIGNAL";
+                    break;
+                default:
+                    logger.error("iopin direction not recognized: %c", iopin->type->direction());
+                    break;
+            }
+            ofs << " ;\n";
+        }
+    }
+
+    ofs << "END PINS" << endl;
+    return true;
+}
+
 bool Database::writeICCAD2017(const string& inputDef, const string& outputDef) {
     ifstream ifs(inputDef.c_str());
     if (!ifs.good()) {
@@ -458,6 +619,56 @@ bool Database::writeICCAD2017(const string& outputDef) {
     ofs << "END DESIGN\n\n" << endl;
 
     ofs.close();
+    return true;
+}
+
+bool Database::write_Openroad(const string& inputDef, const string& outputDef, const std::vector<int> node_selected) {
+    ifstream ifs(inputDef.c_str());
+    if (!ifs.good()) {
+        logger.error("Unable to create/open DEF: %s", inputDef.c_str());
+        return false;
+    }
+
+#ifndef NDEBUG
+    logger.info("reading %s", inputDef.c_str());
+#endif
+
+    ofstream ofs(outputDef.c_str());
+    if (!ofs.good()) {
+        logger.error("Unable to create/open DEF: %s", outputDef.c_str());
+        return false;
+    }
+    logger.info("writing %s", outputDef.c_str());
+    int new_dieHX = static_cast<int>(std::ceil(dieHX / sqrt(2) * 1.1));
+    int new_dieHY = static_cast<int>(std::ceil(dieHY / sqrt(2) * 1.1));
+
+    string line;
+    while (getline(ifs, line)) {
+        istringstream iss(line);
+        string s;
+        if (!(iss >> s)) {
+            ofs << line << endl;
+            continue;
+        } else if (s != "COMPONENTS" && s != "NETS") {
+            ofs << line << endl;
+            continue;
+        } 
+        if (s == "COMPONENTS") {
+            writeComponents(ofs, node_selected);
+        } else if (s == "NETS") {
+            writeNets(ofs, node_selected);
+        } 
+        // else if (s == "PINS") {
+        //     writePins(ofs, node_selected);
+        // }
+        while (getline(ifs, line)) {
+            istringstream iss(line);
+            if (iss >> s && s == "END") {
+                break;
+            }
+        }
+        // process pair (a,b)
+    }
     return true;
 }
 

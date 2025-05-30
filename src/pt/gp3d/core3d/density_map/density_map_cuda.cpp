@@ -19,7 +19,7 @@ torch::Tensor density_map_forward(torch::Tensor normalize_node_info,
         normalize_node_info, sorted_node_map, aux_mat, num_bin_x, num_bin_y, num_bin_z, num_nodes);
 }
 
-torch::Tensor macro_overlay_density_map_forward(torch::Tensor normalize_node_info,
+std::tuple<torch::Tensor, torch::Tensor> macro_overlay_density_map_forward(torch::Tensor normalize_node_info,
     torch::Tensor sorted_node_map,
     torch::Tensor aux_mat,
     torch::Tensor node_rotate_grad,

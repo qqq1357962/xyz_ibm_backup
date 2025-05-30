@@ -62,6 +62,7 @@ public:
                                                          num_nodes);
         int macro_num = macro_mask.sum().item<int>();
         ctx->saved_data["macro_num"] = macro_num;
+        auto node_rotate_grad2 = node_rotate_grad.clone();
         if (calc_overflow) {
             // at::Tensor aux_mat = init_density_map.clone();
             // at::Tensor mov_density_map = density_map_forward(normalize_node_info,
@@ -74,7 +75,7 @@ public:
             
             at::Tensor aux_mat3 = init_density_map.clone();
             
-            at::Tensor mov_density_map_macro_overlay = macro_overlay_density_map_forward(normalize_node_info,
+            auto [mov_density_map_macro_overlay, node_rotate_grad3] = macro_overlay_density_map_forward(normalize_node_info,
                                                                                          mov_conn_sorted_map,
                                                                                          aux_mat3,
                                                                                          node_rotate_grad,
@@ -85,7 +86,7 @@ public:
                                                                                          num_bin_z,
                                                                                          mov_rhs - mov_lhs,
                                                                                          macro_num);
-
+            node_rotate_grad2 = node_rotate_grad3.clone();
             // mov_density_map.mul_(util_weight);  // FIXME:
             // int macro_num = torch::sum(macro_mask).item<int>();
             // at::Tensor aux_mat3 = torch::zeros_like(init_density_map);
@@ -146,7 +147,7 @@ public:
         ctx->save_for_backward({normalize_node_info, mov_sorted_map, grad_mat, density_weight_local, rotate_rate, unit_len});
 
         // FIXME: 4 times smaller than cuda dct
-        return {energy, overflow};
+        return {energy, overflow, node_rotate_grad2};
     }
 
     static variable_list backward(AutogradContext *ctx, variable_list grad_outputs) {

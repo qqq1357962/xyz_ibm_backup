@@ -47,6 +47,81 @@ __global__ void node_pos_to_pin_pos_cuda_forward_kernel(
     }
 }
 
+template <typename scalar_t>
+__global__ void node_pos_to_pin_pos_cross_chip_overlay_cuda_forward_kernel(
+    const torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> node_pos,
+    const torch::PackedTensorAccessor32<scalar_t, 3, torch::RestrictPtrTraits> pin_rel_cpos,
+    const torch::PackedTensorAccessor32<int, 1, torch::RestrictPtrTraits> node_die,
+    const torch::PackedTensorAccessor32<int64_t, 1, torch::RestrictPtrTraits> pin_id2node_id,
+    const torch::PackedTensorAccessor32<float, 1, torch::RestrictPtrTraits> current_node_rotate_state,
+    torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> pin_pos,
+    torch::PackedTensorAccessor32<int, 1, torch::RestrictPtrTraits> pin_die,
+    int num_pins) {
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
+    // const int i = index >> 1;  // pin index
+    const int i = index;  // pin index
+    if (i < num_pins) {
+        for (int c = 0; c < 3; c++) {
+            int64_t node_id = pin_id2node_id[i];
+            // float ratio = 1.0 / (1.0 + std::exp(10 * (current_node_rotate_state[node_id] - 0.5)));
+            scalar_t pin_cpos = pin_rel_cpos[i][0][c] * (1 - current_node_rotate_state[node_id]) +
+                                pin_rel_cpos[i][1][c] * current_node_rotate_state[node_id];
+
+            // scalar_t pin_cpos = pin_rel_cpos[i][0][c] * ratio + pin_rel_cpos[i][1][c] * (1 - ratio);
+
+            pin_pos[i][c] = node_pos[node_id][c] + pin_cpos;
+            pin_die[i] = node_die[node_id];
+        }
+        // macros
+        // 1210
+        // 1208
+        // 1206
+        // 1204
+        // 1587
+        // 1583
+        // 1595
+        // 1591
+        // 1587
+        // 1583
+        // 1595
+        // 1591
+        // 1587
+        // 1583
+        // 1595
+        // 1591
+        // 1587
+        // 1583
+        // 1595
+        // 1591
+        // const int c = index & 1;  // channel index
+    }
+}
+
+template <typename scalar_t>
+__global__ void node_pos_to_pin_pos_overlay_cuda_forward_kernel(
+    const torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> node_pos,
+    const torch::PackedTensorAccessor32<scalar_t, 3, torch::RestrictPtrTraits> pin_rel_cpos,
+    const torch::PackedTensorAccessor32<int64_t, 1, torch::RestrictPtrTraits> pin_id2node_id,
+    const torch::PackedTensorAccessor32<float, 1, torch::RestrictPtrTraits> current_node_rotate_state,
+    torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> pin_pos,
+    int num_pins) {
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
+    // const int i = index >> 1;  // pin index
+    const int i = index;  // pin index
+    if (i < num_pins) {
+        for (int c = 0; c < 3; c++) {
+            int64_t node_id = pin_id2node_id[i];
+            // float ratio = 1.0 / (1.0 + std::exp(10 * (current_node_rotate_state[node_id] - 0.5)));
+            scalar_t pin_cpos = pin_rel_cpos[i][0][c] * (1 - current_node_rotate_state[node_id]) +
+                                pin_rel_cpos[i][1][c] * current_node_rotate_state[node_id];
+            // scalar_t pin_cpos = pin_rel_cpos[i][0][c] * ratio + pin_rel_cpos[i][1][c] * (1 - ratio);
+
+            pin_pos[i][c] = node_pos[node_id][c] + pin_cpos;
+        }
+        // const int c = index & 1;  // channel index
+    }
+}
+
 torch::Tensor node_pos_to_pin_pos_cuda_forward(torch::Tensor node_pos,
                                                torch::Tensor pin_id2node_id,
                                                torch::Tensor pin_rel_cpos) {
@@ -754,6 +829,254 @@ __global__ void wa_wirelength_hpwl_cuda_kernel_with_pin_slide_and_pin_orient(
 }
 
 template <typename scalar_t>
+__global__ void wa_wirelength_hpwl_cuda_kernel_with_pin_slide_overlay_orient(
+    const torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> pin_pos,
+    const torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> node_pos,
+    const torch::PackedTensorAccessor32<scalar_t, 3, torch::RestrictPtrTraits> pin_rel_cpos,
+    const torch::PackedTensorAccessor32<int, 1, torch::RestrictPtrTraits> pin_die,
+    const torch::PackedTensorAccessor32<int64_t, 1, torch::RestrictPtrTraits> hyperedge_list,
+    const torch::PackedTensorAccessor32<int64_t, 1, torch::RestrictPtrTraits> hyperedge_list_end,
+    const torch::PackedTensorAccessor32<bool, 1, torch::RestrictPtrTraits> net_mask,
+    const torch::PackedTensorAccessor32<scalar_t, 1, torch::RestrictPtrTraits> net_weight,
+    torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> partial_wa_wl,
+    torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> partial_hpwl,
+    torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> pin_grad,
+    torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> pin_slide,
+    torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> pin_orient,
+    const torch::PackedTensorAccessor32<float, 1, torch::RestrictPtrTraits> macro_mask,
+    const torch::PackedTensorAccessor32<int64_t, 1, torch::RestrictPtrTraits> pin_id2node_id,
+    const torch::PackedTensorAccessor32<scalar_t, 1, torch::RestrictPtrTraits> ratio_multiply,
+    const torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> direction,
+    int num_nets,
+    float inv_gamma) {
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
+    // const int i = index >> 1;  // net index
+    const int i = index;  // pin index
+    if (i < num_nets && net_mask[i]) {
+        // const int c = index & 1;  // channel index
+        scalar_t w = net_weight[i];
+        int64_t start_idx = 0;
+        if (i != 0) {
+            start_idx = hyperedge_list_end[i - 1];
+        }
+        int64_t end_idx = hyperedge_list_end[i];
+        if (end_idx != start_idx) {
+            float macro = 0;
+            for (int64_t idx = start_idx; idx < end_idx; idx++) {
+                if (macro_mask[pin_id2node_id[hyperedge_list[idx]]] == 1)
+                {
+                    macro = 1;
+                    break;
+                }
+            }
+            for (int c = 0; c < 3; c++) {
+                int64_t pin_id = hyperedge_list[start_idx];
+                int64_t pin_id2 = hyperedge_list[start_idx + 1];
+                scalar_t x_min = min(pin_pos[pin_id][c], pin_pos[pin_id2][c]);
+                scalar_t x_max = max(pin_pos[pin_id][c], pin_pos[pin_id2][c]);
+                scalar_t x_second_min = x_max;
+                scalar_t x_second_max = x_min;
+                for (int64_t idx = start_idx + 2; idx < end_idx; idx++) {
+                    scalar_t xx = pin_pos[hyperedge_list[idx]][c];
+                    if (xx < x_min) {
+                        x_second_min = x_min;
+                        x_min = xx;
+                    } else if (xx < x_second_min) {
+                        x_second_min = xx;
+                    }
+
+                    if (xx > x_max) {
+                        x_second_max = x_max;
+                        x_max = xx;
+                    } else if (xx > x_second_max) {
+                        x_second_max = xx;
+                    }
+                }
+                partial_hpwl[i][c] = abs(x_max - x_min);
+
+                // scalar_t slack = abs(x_max - x_min);
+                double_t xexp_x_sum = 0;
+                double_t xexp_nx_sum = 0;
+                double_t exp_x_sum = 0;
+                double_t exp_nx_sum = 0;
+
+                double_t xexp_x_sum_second = 0;
+                double_t xexp_nx_sum_second = 0;
+                double_t exp_x_sum_second = 0;
+                double_t exp_nx_sum_second = 0;
+
+                scalar_t b_x_second = 0;
+                scalar_t a_x_second = 0;
+                scalar_t b_nx_second = 0;
+                scalar_t a_nx_second = 0;
+
+
+                for (int64_t idx = start_idx; idx < end_idx; idx++) {
+                    // if ((c == 2) && (pin_die[hyperedge_list[idx]] == -1)) continue; // FIXME: ignore wa_z
+                    if (pin_die[hyperedge_list[idx]] == -1) continue; // FIXME: ignore wa_z
+                    scalar_t xx = pin_pos[hyperedge_list[idx]][c];
+                    double_t exp_x;
+                    double_t exp_nx;
+
+                    exp_x = exp(-(x_max - xx) * inv_gamma * (1 + macro));
+                    exp_nx = exp(-(xx - x_min) * inv_gamma * (1 + macro));
+
+                    xexp_x_sum += xx * exp_x;
+                    xexp_nx_sum += xx * exp_nx;
+                    exp_x_sum += exp_x;
+                    exp_nx_sum += exp_nx;
+                }
+
+                scalar_t s_x = xexp_x_sum / exp_x_sum;
+                scalar_t ns_x = xexp_nx_sum / exp_nx_sum;
+
+                scalar_t wl = s_x - ns_x;
+                partial_wa_wl[i][c] = wl;
+                scalar_t scale = 1;
+
+
+                scalar_t b_x = scale * inv_gamma / (exp_x_sum);
+                scalar_t a_x = scale * (1.0 - inv_gamma * s_x) / exp_x_sum;
+                scalar_t b_nx = scale * (-inv_gamma) / (exp_nx_sum);
+                scalar_t a_nx = scale * (1.0 + inv_gamma * ns_x) / exp_nx_sum;
+
+                if ((macro > 1e-1) && (c != 2)) {
+                    for (int64_t idx = start_idx; idx < end_idx; idx++) {
+                        // if ((c == 2) && (pin_die[hyperedge_list[idx]] == -1)) continue; // FIXME: ignore wa_z
+                        if (pin_die[hyperedge_list[idx]] == -1) continue; // FIXME: ignore wa_z
+                        scalar_t xx = pin_pos[hyperedge_list[idx]][c];
+                        double_t exp_x;
+                        double_t exp_nx;
+
+                        if (xx < x_max) {
+                            exp_x = exp(-(x_second_max - xx) * inv_gamma * (1 + macro));
+                            xexp_x_sum_second += xx * exp_x;
+                            exp_x_sum_second += exp_x;
+                        }
+                        if (xx > x_min) {
+                            exp_nx = exp(-(xx - x_second_min) * inv_gamma * (1 + macro));
+                            xexp_nx_sum_second += xx * exp_nx;
+                            exp_nx_sum_second += exp_nx;
+                        }
+                    }
+
+                    // scalar_t s_x_second = xexp_x_sum_second / exp_x_sum_second;
+                    // scalar_t ns_x_second = xexp_nx_sum_second / exp_nx_sum_second;
+
+                    // scalar_t scale = 1;
+                    // b_x_second = scale * inv_gamma / (exp_x_sum_second);
+                    // a_x_second = scale * (1.0 - inv_gamma * s_x_second) / exp_x_sum_second;
+                    // b_nx_second = scale * (-inv_gamma) / (exp_nx_sum_second);
+                    // a_nx_second = scale * (1.0 + inv_gamma * ns_x_second) / exp_nx_sum_second;
+                }
+
+                for (int64_t idx = start_idx; idx < end_idx; idx++) {
+                    if ((c == 2) && (pin_die[hyperedge_list[idx]] == -1)) continue; // FIXME: ignore wa_z
+                    // if (pin_die[hyperedge_list[idx]] == -1) continue; // FIXME: ignore wa_z
+                    int64_t pin_id = hyperedge_list[idx];
+                    scalar_t xx = pin_pos[pin_id][c];
+                    double_t exp_x;
+                    double_t exp_nx;
+                    exp_x = exp(-(x_max - xx) * inv_gamma * (1 + macro));
+                    exp_nx = exp(-(xx - x_min) * inv_gamma * (1 + macro));
+
+                    if ((macro_mask[pin_id2node_id[pin_id]] == 1) && (c != 2)) {
+                        for (int i = 0; i < 2; i++) 
+                        {
+                            scalar_t long_side_pin_rel_cpos = sqrt(pin_rel_cpos[pin_id][i][0] * pin_rel_cpos[pin_id][i][0] + pin_rel_cpos[pin_id][i][1] * pin_rel_cpos[pin_id][i][1]);
+                            scalar_t inv_long_side_pin_rel_cpos = 0;
+                            if (long_side_pin_rel_cpos > 1e-5) {
+                                inv_long_side_pin_rel_cpos = 1 / long_side_pin_rel_cpos;
+                            }
+                            scalar_t skew = 0;
+                            scalar_t xx_d = node_pos[pin_id2node_id[pin_id]][c] + pin_rel_cpos[pin_id][i][c];
+                            scalar_t x_min_d = x_min;
+                            scalar_t x_max_d = x_max;
+                            double_t xexp_x_sum_d = xexp_x_sum - xx * exp_x;
+                            double_t xexp_nx_sum_d = xexp_nx_sum - xx * exp_nx;
+                            double_t exp_x_sum_d = exp_x_sum - exp_x;
+                            double_t exp_nx_sum_d = exp_nx_sum - exp_nx;
+                            if (abs(xx - xx_d) > 1e-3) {
+                                if (xx_d >= x_max) {
+                                    x_max_d = xx_d;
+                                    xexp_x_sum_d = xexp_x_sum_d * exp(-(xx_d - x_max) * inv_gamma * (1 + macro));
+                                    exp_x_sum_d = exp_x_sum_d * exp(-(xx_d - x_max) * inv_gamma * (1 + macro));
+                                }
+                                else if (xx > x_second_max) {
+                                    if (xx_d > x_second_max) {
+                                        x_max_d = xx_d;
+                                        xexp_x_sum_d = xexp_x_sum_second * exp(-(xx_d - x_second_max) * inv_gamma * (1 + macro));
+                                        exp_x_sum_d = exp_x_sum_second * exp(-(xx_d - x_second_max) * inv_gamma * (1 + macro));
+                                    } else {
+                                        x_max_d = x_second_max;
+                                        xexp_x_sum_d = xexp_x_sum_second;
+                                        exp_x_sum_d = exp_x_sum_second;
+                                    }
+                                }
+
+                                if (xx_d <= x_min) {
+                                    x_min_d = xx_d;
+                                    xexp_nx_sum_d = xexp_nx_sum_d * exp(-(x_min - xx_d) * inv_gamma * (1 + macro));
+                                    exp_nx_sum_d = exp_nx_sum_d * exp(-(x_min - xx_d) * inv_gamma * (1 + macro));
+                                }
+                                else if (xx < x_second_min) {
+                                    if (xx_d < x_second_min) {
+                                        x_min_d = xx_d;
+                                        xexp_nx_sum_d = xexp_nx_sum_second * exp(-(x_second_min - xx_d) * inv_gamma * (1 + macro));
+                                        exp_nx_sum_d = exp_nx_sum_second * exp(-(x_second_min - xx_d) * inv_gamma * (1 + macro));
+                                    } else {
+                                        x_min_d = x_second_min;
+                                        xexp_nx_sum_d = xexp_nx_sum_second;
+                                        exp_nx_sum_d = exp_nx_sum_second;
+                                    }
+                                }
+                            }
+                            
+                            double_t exp_x_d = exp(-(x_max_d - xx_d) * inv_gamma * (1 + macro));
+                            double_t exp_nx_d = exp(-(xx_d - x_min_d) * inv_gamma * (1 + macro));
+
+                            xexp_x_sum_d += xx_d * exp_x_d;
+                            xexp_nx_sum_d += xx_d * exp_nx_d;
+                            exp_x_sum_d += exp_x_d;
+                            exp_nx_sum_d += exp_nx_d;
+
+                            scalar_t s_x_d = xexp_x_sum_d / exp_x_sum_d;
+                            scalar_t ns_x_d = xexp_nx_sum_d / exp_nx_sum_d;
+
+                            scalar_t b_x_d = scale * inv_gamma / (exp_x_sum_d);
+                            scalar_t a_x_d = scale * (1.0 - inv_gamma * s_x_d) / exp_x_sum_d;
+                            scalar_t b_nx_d = scale * (-inv_gamma) / (exp_nx_sum_d);
+                            scalar_t a_nx_d = scale * (1.0 + inv_gamma * ns_x_d) / exp_nx_sum_d;
+
+                            scalar_t grad_d = (a_x_d + b_x_d * xx_d) * exp_x_d - (a_nx_d + b_nx_d * xx_d) * exp_nx_d;
+                            if (long_side_pin_rel_cpos > 1e-5) {
+                                pin_slide[pin_id][i] += (-1) * grad_d * inv_long_side_pin_rel_cpos * pin_rel_cpos[pin_id][i][c] * direction[pin_id2node_id[pin_id]][i];
+                            }
+                            else {
+                                pin_slide[pin_id][i] += (-1) * grad_d * direction[pin_id2node_id[pin_id]][i];
+                            }
+                            
+                            pin_orient[pin_id][i] += ((c % 2 == 0) ? 1 : -1) * grad_d * pin_rel_cpos[pin_id][i][1 - c];
+                        }
+                    }
+                    
+                    scalar_t grad = (a_x + b_x * xx) * exp_x - (a_nx + b_nx * xx) * exp_nx;
+
+                    if (c != 2) {
+                        pin_grad[pin_id][c] = grad;
+                    } else {
+                        pin_grad[pin_id][c] += w * grad;
+                        
+                        if (macro_mask[pin_id2node_id[pin_id]] == 1)
+                            pin_grad[pin_id][c] -= ratio_multiply[pin_id2node_id[pin_id]];
+                    }
+                }
+            }
+        }
+    }
+}
+
+template <typename scalar_t>
 __global__ void wa_wirelength_hpwl_multi_layer_cuda_kernel(
     const torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> pin_pos,
     const torch::PackedTensorAccessor32<int, 1, torch::RestrictPtrTraits> pin_die,
@@ -1307,7 +1630,8 @@ torch::Tensor masked_scale_hpwl_sum_cuda(torch::Tensor node_pos,
                                          torch::Tensor hyperedge_list,
                                          torch::Tensor hyperedge_list_end,
                                          torch::Tensor net_mask,
-                                         torch::Tensor hpwl_scale) {
+                                         torch::Tensor hpwl_scale,
+                                         torch::Tensor node_orient_state) {
     cudaSetDevice(node_pos.get_device());
     auto stream = at::cuda::getCurrentCUDAStream();
 
@@ -1316,18 +1640,21 @@ torch::Tensor masked_scale_hpwl_sum_cuda(torch::Tensor node_pos,
     const auto num_nets = hyperedge_list_end.size(0);
     const auto num_channels = 3;  // x, y
 
-    auto pin_pos = pin_rel_cpos.clone();  // pin
+    auto pin_pos = pin_rel_cpos.index({torch::indexing::Slice(), 0, torch::indexing::Slice()}).clone(); // pin
     auto partial_hpwl = torch::zeros({num_nets, num_channels}, torch::dtype(pin_pos.dtype()).device(pin_pos.device()));
 
     const int threads = 128;
     const int blocks = (num_pins + threads - 1) / threads;
 
     AT_DISPATCH_ALL_TYPES(node_pos.scalar_type(), "node_pos_to_pin_pos_cuda_forward", ([&] {
-                              node_pos_to_pin_pos_cuda_forward_kernel<scalar_t><<<blocks, threads, 0, stream>>>(
-                                  node_pos.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
-                                  pin_id2node_id.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
-                                  pin_pos.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
-                                  num_pins);
+                              node_pos_to_pin_pos_overlay_cuda_forward_kernel<scalar_t>
+                                  <<<blocks, threads, 0, stream>>>(
+                                      node_pos.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
+                                      pin_rel_cpos.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
+                                      pin_id2node_id.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
+                                      node_orient_state.packed_accessor32<float, 1, torch::RestrictPtrTraits>(),
+                                      pin_pos.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
+                                      num_pins);
                           }));
 
     const int threads2 = 128;
@@ -1388,15 +1715,64 @@ __global__ void update_rel_cpos_rotate_kernel(
                                  pin_rel_cpos[i][c] * current_node_slide_state[node_id] + 1e-3;
         }
 
-        for (int c = 0; c < 2; c++) {
-            int64_t node_id = pin_id2node_id[i];
-            float rotated_pin_rel_cpos = (c == 0 ? 1 : -1) * pin_rel_cpos[i][1 - c];
-            // float ratio = 1.0 / (1.0 + std::exp(10 * (current_node_rotate_state[node_id] - 0.5)));
-            pin_rel_cpos[i][c] = pin_rel_cpos[i][c] * (1 - current_node_rotate_state[node_id]) +
-                                 rotated_pin_rel_cpos * current_node_rotate_state[node_id];
-            // pin_rel_cpos[i][c] = pin_rel_cpos[i][c] * ratio + rotated_pin_rel_cpos * (1 - ratio);
+        int64_t node_id = pin_id2node_id[i];
+        float rotated_pin_rel_cpos = pin_rel_cpos[i][1];
+        float rotated_pin_rel_cpos_ = -pin_rel_cpos[i][0];
+        pin_rel_cpos[i][0] = pin_rel_cpos[i][0] * (1 - current_node_rotate_state[node_id]) +
+                                rotated_pin_rel_cpos * current_node_rotate_state[node_id];
+        pin_rel_cpos[i][1] = pin_rel_cpos[i][1] * (1 - current_node_rotate_state[node_id]) +
+                                rotated_pin_rel_cpos_ * current_node_rotate_state[node_id];
+    }
+}
+
+__global__ void update_rel_cpos_overlay_kernel(
+    torch::PackedTensorAccessor32<float, 3, torch::RestrictPtrTraits> pin_rel_cpos,
+    const torch::PackedTensorAccessor32<int64_t, 1, torch::RestrictPtrTraits> pin_id2node_id,
+    const torch::PackedTensorAccessor32<float, 2, torch::RestrictPtrTraits> ratio_difference,
+    const torch::PackedTensorAccessor32<float, 2, torch::RestrictPtrTraits> current_node_slide_state,
+    const torch::PackedTensorAccessor32<float, 1, torch::RestrictPtrTraits> macro_mask,
+    torch::PackedTensorAccessor32<float, 2, torch::RestrictPtrTraits> direction,
+    int num_pins,
+    bool rotate_90) {
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
+    // const int i = index >> 1;  // pin index
+    const int i = index;  // pin index
+    if (i < num_pins) {
+        int64_t node_id = pin_id2node_id[i];
+        if (macro_mask[node_id] == 1) {
+            for (int c = 0; c < 2; c++) {
+                float ratio = 1.0 / (1.0 + std::exp(10 * (current_node_slide_state[node_id][0] - 0.5)));
+                pin_rel_cpos[i][0][c] = pin_rel_cpos[i][0][c] * ratio_difference[i][c];
+                // pin_rel_cpos[i][0][c] = pin_rel_cpos[i][0][c] * (1 - current_node_slide_state[node_id][0]) -
+                //                         pin_rel_cpos[i][0][c] * current_node_slide_state[node_id][0];
+                pin_rel_cpos[i][0][c] = pin_rel_cpos[i][0][c] * ratio - pin_rel_cpos[i][0][c] * (1 - ratio);
+            }
+
+            if (rotate_90) {
+                float rotated_pin_rel_cpos = pin_rel_cpos[i][1][1] * ratio_difference[i][1];
+                float rotated_pin_rel_cpos_ = -pin_rel_cpos[i][1][0] * ratio_difference[i][0];
+                float ratio = 1.0 / (1.0 + std::exp(10 * (current_node_slide_state[node_id][1] - 0.5)));
+                // pin_rel_cpos[i][1][0] = rotated_pin_rel_cpos * (1 - current_node_slide_state[node_id][1]) -
+                //                         rotated_pin_rel_cpos * current_node_slide_state[node_id][1];
+                pin_rel_cpos[i][1][0] = rotated_pin_rel_cpos * ratio - rotated_pin_rel_cpos * (1 - ratio);
+
+                // pin_rel_cpos[i][1][1] = rotated_pin_rel_cpos_ * (1 - current_node_slide_state[node_id][1]) -
+                //                         rotated_pin_rel_cpos_ * current_node_slide_state[node_id][1];
+                pin_rel_cpos[i][1][1] = rotated_pin_rel_cpos_ * ratio - rotated_pin_rel_cpos_ * (1 - ratio);
+            }
+            else {
+                for (int c = 0; c < 2; c++) {
+                    float ratio = 1.0 / (1.0 + std::exp(10 * (current_node_slide_state[node_id][1] - 0.5)));
+                    pin_rel_cpos[i][1][c] = pin_rel_cpos[i][1][c] * ratio_difference[i][c];
+                    // pin_rel_cpos[i][1][c] = pin_rel_cpos[i][1][c] * (1 - current_node_slide_state[node_id][1]) -
+                    //                         pin_rel_cpos[i][1][c] * current_node_slide_state[node_id][1];
+                    pin_rel_cpos[i][1][c] = pin_rel_cpos[i][1][c] * ratio - pin_rel_cpos[i][1][c] * (1 - ratio);
+                }
+            }
+
+            direction[node_id][0] = current_node_slide_state[node_id][0] > 0.5 ? 1 : -1;
+            direction[node_id][1] = current_node_slide_state[node_id][1] > 0.5 ? 1 : -1;
         }
-        // const int c = index & 1;  // channel index
     }
 }
 
@@ -1469,6 +1845,28 @@ void update_rel_cpos_rotate_cuda(torch::Tensor& pin_rel_cpos,
             num_pins);
 }
 
+void update_rel_cpos_overlay_cuda(torch::Tensor& pin_rel_cpos,
+                                 torch::Tensor pin_id2node_id,
+                                 torch::Tensor ratio_difference,
+                                 torch::Tensor current_node_slide_state,
+                                 torch::Tensor macro_mask,
+                                 torch::Tensor& direction,
+                                 bool rotate_90) {
+    int num_pins = pin_id2node_id.size(0);
+    auto stream = at::cuda::getCurrentCUDAStream();
+    const int threads = 128;
+    const int blocks = (num_pins + threads - 1) / threads;
+    update_rel_cpos_overlay_kernel<<<blocks, threads, 0, stream>>>(
+        pin_rel_cpos.packed_accessor32<float, 3, torch::RestrictPtrTraits>(),
+        pin_id2node_id.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
+        ratio_difference.packed_accessor32<float, 2, torch::RestrictPtrTraits>(),
+        current_node_slide_state.packed_accessor32<float, 2, torch::RestrictPtrTraits>(),
+        macro_mask.packed_accessor32<float, 1, torch::RestrictPtrTraits>(),
+        direction.packed_accessor32<float, 2, torch::RestrictPtrTraits>(),
+        num_pins,
+        rotate_90);
+}
+
 __global__ void calc_node_grad_deterministic_cuda_kernel(
     torch::PackedTensorAccessor32<float, 2, torch::RestrictPtrTraits> node_grad,
     const torch::PackedTensorAccessor32<float, 2, torch::RestrictPtrTraits> pin_grad,
@@ -1517,6 +1915,30 @@ __global__ void calc_node_slide_grad_deterministic_cuda_kernel(
     }
 }
 
+__global__ void calc_node_slide_rotate_overlay_grad_deterministic_cuda_kernel(
+    torch::PackedTensorAccessor32<float, 2, torch::RestrictPtrTraits> node_slide,
+    const torch::PackedTensorAccessor32<float, 2, torch::RestrictPtrTraits> pin_slide,
+    const torch::PackedTensorAccessor32<int64_t, 1, torch::RestrictPtrTraits> node2pin_list,
+    const torch::PackedTensorAccessor32<int64_t, 1, torch::RestrictPtrTraits> node2pin_list_end,
+    int num_nodes) {
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
+    const int i = index / 2;  // node index
+    if (i < num_nodes) {
+        int64_t start_idx = 0;
+        const int c = index % 2;
+        if (i != 0) {
+            start_idx = node2pin_list_end[i - 1];
+        }
+        int64_t end_idx = node2pin_list_end[i];
+        if (end_idx != start_idx) {
+            node_slide[i][c] += pin_slide[node2pin_list[start_idx]][c];
+            for (int64_t idx = start_idx + 1; idx < end_idx; idx++) {
+                node_slide[i][c] += pin_slide[node2pin_list[idx]][c];
+            }
+        }
+    }
+}
+
 void calc_node_grad_cuda(torch::Tensor node_grad,
                          torch::Tensor pin_id2node_id,
                          torch::Tensor pin_grad,
@@ -1559,6 +1981,29 @@ void calc_node_slide_grad_cuda(torch::Tensor node_slide,
             num_nodes);
     } else {
         node_slide.scatter_add_(0, pin_id2node_id, pin_slide);
+    }
+}
+
+void calc_node_slide_rotate_overlay_grad_cuda(torch::Tensor node_slide,
+                         torch::Tensor pin_id2node_id,
+                         torch::Tensor pin_slide,
+                         torch::Tensor node2pin_list,
+                         torch::Tensor node2pin_list_end,
+                         int num_nodes,
+                         bool deterministic) {
+    if (deterministic) {
+        auto stream = at::cuda::getCurrentCUDAStream();
+        const int threads = 128;
+        const int blocks = (num_nodes * 2 + threads - 1) / threads;
+        calc_node_slide_rotate_overlay_grad_deterministic_cuda_kernel<<<blocks, threads, 0, stream>>>(
+            node_slide.packed_accessor32<float, 2, torch::RestrictPtrTraits>(),
+            pin_slide.packed_accessor32<float, 2, torch::RestrictPtrTraits>(),
+            node2pin_list.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
+            node2pin_list_end.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
+            num_nodes);
+    } else {
+        const auto pin_id2node_id_view = pin_id2node_id.unsqueeze(1).expand({-1, 2});
+        node_slide.scatter_add_(0, pin_id2node_id_view, pin_slide);
     }
 }
 
@@ -1648,6 +2093,105 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Te
         node_slide_grad, pin_id2node_id, pin_slide, node2pin_list, node2pin_list_end, num_nodes, deterministic);
     
     calc_node_slide_grad_cuda(
+        node_orient_grad, pin_id2node_id, pin_orient, node2pin_list, node2pin_list_end, num_nodes, deterministic);
+    // const auto pin_id2node_id_view = pin_id2node_id.unsqueeze(1).expand({-1, 3});
+    // node_grad.scatter_add_(0, pin_id2node_id_view, pin_grad);
+
+    return {partial_wa_wl, node_grad, partial_hpwl, node_slide_grad, node_orient_grad};
+}
+
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> merged_forward_backward_overlay_with_hpwl_cuda(
+    torch::Tensor node_pos,
+    torch::Tensor node_die,
+    torch::Tensor pin_id2node_id,
+    torch::Tensor pin_rel_cpos,
+    torch::Tensor node2pin_list,
+    torch::Tensor node2pin_list_end,
+    torch::Tensor hyperedge_list,
+    torch::Tensor hyperedge_list_end,
+    torch::Tensor current_node_rotate_state,
+    torch::Tensor net_mask,
+    torch::Tensor net_weight,
+    torch::Tensor macro_mask,
+    torch::Tensor ratio_multiply,
+    torch::Tensor direction,
+    float gamma) {
+    cudaSetDevice(node_pos.get_device());
+    auto stream = at::cuda::getCurrentCUDAStream();
+
+    const auto num_nodes = node_pos.size(0);
+    const auto num_pins = pin_id2node_id.size(0);
+    const auto num_nets = hyperedge_list_end.size(0);
+    const auto num_channels = 3;  // x, y
+
+    auto pin_pos = pin_rel_cpos.index({torch::indexing::Slice(), 0, torch::indexing::Slice()}).clone();  // pin
+    auto pin_die = torch::zeros(num_pins, torch::dtype(torch::kInt).device(node_pos.device()));
+    auto partial_wa_wl = torch::zeros({num_nets, num_channels}, torch::dtype(pin_pos.dtype()).device(pin_pos.device()));
+    auto partial_hpwl = torch::zeros({num_nets, num_channels}, torch::dtype(pin_pos.dtype()).device(pin_pos.device()));
+    auto pin_grad = torch::zeros({num_pins, num_channels}, torch::dtype(pin_pos.dtype()).device(pin_pos.device()));
+    auto pin_slide = torch::zeros({num_pins, 2}, torch::dtype(pin_pos.dtype()).device(pin_pos.device()));
+    auto pin_orient = torch::zeros({num_pins, 2}, torch::dtype(pin_pos.dtype()).device(pin_pos.device()));
+
+    const int threads = 128;
+    const int blocks = (num_pins + threads - 1) / threads;
+
+    AT_DISPATCH_ALL_TYPES(node_pos.scalar_type(), "node_pos_to_pin_pos_cuda_forward", ([&] {
+                              node_pos_to_pin_pos_cross_chip_overlay_cuda_forward_kernel<scalar_t>
+                                  <<<blocks, threads, 0, stream>>>(
+                                      node_pos.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
+                                      pin_rel_cpos.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
+                                      node_die.packed_accessor32<int, 1, torch::RestrictPtrTraits>(),
+                                      pin_id2node_id.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
+                                      current_node_rotate_state.packed_accessor32<float, 1, torch::RestrictPtrTraits>(),
+                                      pin_pos.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
+                                      pin_die.packed_accessor32<int, 1, torch::RestrictPtrTraits>(),
+                                      num_pins);
+                          }));
+
+    const int threads2 = 128;
+    const int blocks2 = (num_nets + threads2 - 1) / threads2;
+
+    float inv_gamma = 1 / gamma;
+    AT_DISPATCH_ALL_TYPES(pin_pos.scalar_type(), "wa_wirelength_hpwl", ([&] {
+                            //   wa_wirelength_hpwl_linear_model_cuda_kernel<scalar_t><<<blocks2, threads2, 0, stream>>>(
+                            //   wa_wirelength_hpwl2_cuda_kernel<scalar_t><<<blocks2, threads2, 0, stream>>>(
+                                  wa_wirelength_hpwl_cuda_kernel_with_pin_slide_overlay_orient<scalar_t><<<blocks2, threads2, 0, stream>>>(
+                                  pin_pos.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
+                                  node_pos.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
+                                  pin_rel_cpos.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
+                                  pin_die.packed_accessor32<int, 1, torch::RestrictPtrTraits>(),
+                                  hyperedge_list.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
+                                  hyperedge_list_end.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
+                                  net_mask.packed_accessor32<bool, 1, torch::RestrictPtrTraits>(),
+                                  net_weight.packed_accessor32<scalar_t, 1, torch::RestrictPtrTraits>(),
+                                  partial_wa_wl.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
+                                  partial_hpwl.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
+                                  pin_grad.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
+                                  pin_slide.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
+                                  pin_orient.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
+                                  macro_mask.packed_accessor32<float, 1, torch::RestrictPtrTraits>(),
+                                  pin_id2node_id.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
+                                  ratio_multiply.packed_accessor32<scalar_t, 1, torch::RestrictPtrTraits>(),
+                                  direction.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
+                                  num_nets,
+                                  inv_gamma);
+                          }));
+
+    // std::cout << pin_pos << std::endl;
+    // std::cout << partial_hpwl << std::endl;
+    // std::cout << "-----------------------------------" << std::endl;
+
+    auto node_grad = torch::zeros({num_nodes, num_channels}, torch::dtype(pin_grad.dtype()).device(pin_grad.device()));
+    auto node_slide_grad = torch::zeros({num_nodes, 2}, torch::dtype(pin_grad.dtype()).device(pin_grad.device()));
+    auto node_orient_grad = torch::zeros({num_nodes, 2}, torch::dtype(pin_grad.dtype()).device(pin_grad.device()));
+    bool deterministic = true;
+    calc_node_grad_cuda(
+        node_grad, pin_id2node_id, pin_grad, node2pin_list, node2pin_list_end, num_nodes, deterministic);
+
+    calc_node_slide_rotate_overlay_grad_cuda(
+        node_slide_grad, pin_id2node_id, pin_slide, node2pin_list, node2pin_list_end, num_nodes, deterministic);
+    
+    calc_node_slide_rotate_overlay_grad_cuda(
         node_orient_grad, pin_id2node_id, pin_orient, node2pin_list, node2pin_list_end, num_nodes, deterministic);
     // const auto pin_id2node_id_view = pin_id2node_id.unsqueeze(1).expand({-1, 3});
     // node_grad.scatter_add_(0, pin_id2node_id_view, pin_grad);

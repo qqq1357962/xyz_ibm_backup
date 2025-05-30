@@ -214,8 +214,9 @@ Dict GlobalParser::preprocess_design_info(shared_ptr<gp::GPDatabase> gpdb) {
     int siteWidth = gpdb->getSiteWidth();
     int siteHeight = gpdb->getSiteHeight();
     const tuple<int, int> site_info = make_tuple(double(siteWidth), double(siteHeight));
-    torch::Tensor bondingInfo =
-        torch::tensor({siteWidth * 4, siteHeight, 0}, torch::dtype(torch::kFloat32));
+    gpdb->bondingSizeX = siteWidth * 4;
+    gpdb->bondingSizeY = siteHeight;
+    torch::Tensor bondingInfo = torch::tensor({siteWidth * 4, siteHeight, 0}, torch::dtype(torch::kFloat32));
     int bondingCost = 0;
 
     torch::Tensor node_pos = gpdb->getNodeCPosTensor();

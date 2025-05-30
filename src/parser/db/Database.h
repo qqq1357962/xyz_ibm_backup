@@ -222,6 +222,10 @@ public:
     bool writeICCAD2017(const string& inputDef, const string& outputDef);
     bool writeICCAD2017(const string& outputDef);
     bool writeComponents(ofstream& ofs);
+    bool writeComponents(ofstream& ofs, const std::vector<int> node_selected);
+    bool writeNets(ofstream& ofs, const std::vector<int> node_selected);
+    bool writePins(ofstream& ofs, const std::vector<int> node_selected);
+    bool write_Openroad(const string& inputDef, const string& outputDef, const std::vector<int> node_selected);
     bool writeBuffer(ofstream& ofs, const string& line);
     void writeBufferFlush(ofstream& ofs);
 
@@ -277,6 +281,7 @@ public:
 
     bool readICCAD2022(const string& file);
     bool writeICCAD2022(const string& file);
+    bool writeOpenroad_vias(const string& file);
     bool resumeICCAD2022(const string& file);
 
     void placeBonding(int lx, int ly, int netId);

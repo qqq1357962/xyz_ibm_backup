@@ -17,8 +17,11 @@ tuple<Dict, shared_ptr<db::Database>, shared_ptr<gp::GPDatabase>> load_dataset()
         gpdb->setup();
         if (st::setting.dataset == "iccad2022") {
             design_info = parser.preprocess_design_info_iccad2022(gpdb);
-        } else
+        } else {
             design_info = parser.preprocess_design_info(gpdb);
+            rawdb->bondingSizeX = gpdb->bondingSizeX;
+            rawdb->bondingSizeY = gpdb->bondingSizeY;
+        } 
     } else {
         // TODO:
         logger.info("loading from pt dataset...");

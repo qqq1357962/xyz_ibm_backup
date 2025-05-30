@@ -74,7 +74,8 @@ torch::Tensor run_gp(NodeData& data,
     st::setting.early_stop_check_plateau = false;
     st::setting.magic_hpwl *= 2;
     st::setting.density_weight_coef -= 0.01;
-    st::setting.wa_coeff += 1;
+    // st::setting.wa_coeff += 1;
+    st::setting.wa_coeff /= 2;
     st::setting.target_density = 1;
     // st::setting.stop_overflow = 0.3;
     data.target_density = st::setting.target_density;

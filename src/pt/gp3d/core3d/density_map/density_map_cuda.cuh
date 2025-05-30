@@ -10,7 +10,7 @@ torch::Tensor density_map_cuda_forward(torch::Tensor normalize_node_info,
                                        int num_bin_z,
                                        int num_nodes);
 
-torch::Tensor macro_overlay_density_map_cuda_forward(torch::Tensor normalize_node_info,
+std::tuple<torch::Tensor, torch::Tensor> macro_overlay_density_map_cuda_forward(torch::Tensor normalize_node_info,
                                         torch::Tensor sorted_node_map,
                                         torch::Tensor aux_mat,
                                         torch::Tensor node_rotate_grad,

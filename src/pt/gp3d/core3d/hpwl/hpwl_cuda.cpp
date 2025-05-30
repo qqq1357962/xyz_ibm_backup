@@ -51,6 +51,23 @@ void update_rel_cpos_rotate(torch::Tensor& pin_rel_cpos,
         pin_rel_cpos, pin_id2node_id, ratio_difference, current_node_slide_state, current_node_rotate_state, rotate_direction);
 }
 
+void update_rel_cpos_overlay(torch::Tensor& pin_rel_cpos,
+                             torch::Tensor pin_id2node_id,
+                             torch::Tensor ratio_difference,
+                             torch::Tensor current_node_slide_state,
+                             torch::Tensor macro_mask,
+                             torch::Tensor& direction,
+                             bool rotate_90) {
+    CHECK_INPUT(pin_rel_cpos);
+    CHECK_INPUT(pin_id2node_id);
+    CHECK_INPUT(ratio_difference);
+    CHECK_INPUT(current_node_slide_state);
+    CHECK_INPUT(direction);
+
+    return update_rel_cpos_overlay_cuda(
+        pin_rel_cpos, pin_id2node_id, ratio_difference, current_node_slide_state, macro_mask, direction, rotate_90);
+}
+
 tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> merged_forward_backward_with_hpwl(torch::Tensor node_pos,
                                                                                      torch::Tensor node_die,
                                                                                      torch::Tensor pin_id2node_id,
@@ -75,6 +92,36 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
     return merged_forward_backward_with_hpwl_cuda(
         node_pos, node_die, pin_id2node_id, pin_rel_cpos, 
             node2pin_list, node2pin_list_end,hyperedge_list, hyperedge_list_end, net_mask, net_weight, macro_mask, ratio_multiply, gamma);
+}
+
+tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> merged_forward_backward_overlay_with_hpwl(torch::Tensor node_pos,
+                                                                                     torch::Tensor node_die,
+                                                                                     torch::Tensor pin_id2node_id,
+                                                                                     torch::Tensor pin_rel_cpos,
+                                                                                     torch::Tensor node2pin_list,
+                                                                                     torch::Tensor node2pin_list_end,
+                                                                                     torch::Tensor hyperedge_list,
+                                                                                     torch::Tensor hyperedge_list_end,
+                                                                                     torch::Tensor current_node_rotate_state,
+                                                                                     torch::Tensor net_mask,
+                                                                                     torch::Tensor net_weight,
+                                                                                     torch::Tensor macro_mask,
+                                                                                     torch::Tensor ratio_multiply,
+                                                                                     torch::Tensor direction,
+                                                                                     float gamma) {
+    CHECK_INPUT(node_pos);
+    CHECK_INPUT(pin_id2node_id);
+    CHECK_INPUT(pin_rel_cpos);
+    CHECK_INPUT(hyperedge_list);
+    CHECK_INPUT(hyperedge_list_end);
+    CHECK_INPUT(current_node_rotate_state);
+    CHECK_INPUT(net_mask);
+    CHECK_INPUT(net_weight);
+    CHECK_INPUT(direction);
+
+    return merged_forward_backward_overlay_with_hpwl_cuda(
+        node_pos, node_die, pin_id2node_id, pin_rel_cpos, 
+            node2pin_list, node2pin_list_end, hyperedge_list, hyperedge_list_end, current_node_rotate_state, net_mask, net_weight, macro_mask, ratio_multiply, direction, gamma);
 }
 
 tuple<torch::Tensor, torch::Tensor, torch::Tensor> merged_forward_backward_with_accurate_hpwl(
@@ -109,7 +156,8 @@ torch::Tensor masked_scale_hpwl(torch::Tensor node_pos,
                                 torch::Tensor hyperedge_list,
                                 torch::Tensor hyperedge_list_end,
                                 torch::Tensor net_mask,
-                                torch::Tensor hpwl_scale) {
+                                torch::Tensor hpwl_scale,
+                                torch::Tensor node_orient_state) {
     CHECK_INPUT(node_pos);
     CHECK_INPUT(pin_id2node_id);
     CHECK_INPUT(pin_rel_cpos);
@@ -117,8 +165,10 @@ torch::Tensor masked_scale_hpwl(torch::Tensor node_pos,
     CHECK_INPUT(hyperedge_list_end);
     CHECK_INPUT(net_mask);
     CHECK_INPUT(hpwl_scale);
+    CHECK_INPUT(node_orient_state);
+
     return masked_scale_hpwl_sum_cuda(
-        node_pos, pin_id2node_id, pin_rel_cpos, hyperedge_list, hyperedge_list_end, net_mask, hpwl_scale);
+        node_pos, pin_id2node_id, pin_rel_cpos, hyperedge_list, hyperedge_list_end, net_mask, hpwl_scale, node_orient_state);
 }
 
 torch::Tensor get_hpwl(PlaceData& data, torch::Tensor pin_pos) {

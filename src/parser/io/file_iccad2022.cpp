@@ -378,6 +378,49 @@ bool Database::writeICCAD2022(const string& file) {
     return true;
 }
 
+bool Database::writeOpenroad_vias(const string& file) {
+    printlog(LOG_INFO, "start writing output...");
+    std::ofstream fs(file.c_str());
+    if (!fs.good()) {
+        printlog(LOG_ERROR, "cannot open file: %s", file.c_str());
+        return false;
+    }
+    // get cell and terminal info
+    vector<int> cellInBot;
+    vector<int> cellInTop;
+    vector<int> validBondingIds;
+    for (auto cell : this->cells) {
+        if (cell->getDieId() != -1) {
+            if (cell->getDieId() == 0) {
+                cellInBot.emplace_back(cell->id);
+            } else if (cell->getDieId() == 1) {
+                cellInTop.emplace_back(cell->id);
+            } else {
+                printlog(LOG_WARN, "Unknown dieId %d for cell %s", cell->getDieId(), cell->name().c_str());
+            }
+        } else {
+            printlog(LOG_WARN, "Haven't yet assigned dieId for cell %s", cell->name().c_str());
+        }
+    }
+    for (std::size_t id = 0; id < bondings.size(); id++) {
+        if (bondings[id].valid) {
+            validBondingIds.emplace_back(id);
+        }
+    }
+    // write files
+    fs << "NumTerminals " << validBondingIds.size() << std::endl;
+    fs << "Terminal size " << static_cast<float>(bondingSizeX) / 2000 << " " << static_cast<float>(bondingSizeY) / 2000 << std::endl;
+    for (int bondingId : validBondingIds) {
+        auto& bonding = bondings[bondingId];
+        int netId = bonding.netId();
+        string netName = nets[netId]->name;
+        fs << "Terminal " << netName << " " << bonding.lx() << " " << bonding.ly() << std::endl;
+    }
+    fs.close();
+    printlog(LOG_INFO, "finish writing output in %s", file.c_str());
+    return true;
+}
+
 bool Database::resumeICCAD2022(const std::string& file) {
     printlog(LOG_INFO, "Resume placement. Starting parsing the file %s", file.c_str());
     std::ifstream infile(file);

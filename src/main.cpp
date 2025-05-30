@@ -30,6 +30,8 @@ argparse::ArgumentParser get_option(int argc, char* argv[]) {
     parser.add_argument("--adjust_macro").default_value(string("false")).help("true/false");
     parser.add_argument("--use_greedy_place_in_fp").default_value(string("false")).help("true/false");
     parser.add_argument("--half_filler_height").default_value(string("false")).help("true/false");
+    parser.add_argument("--load_def_template").default_value(string("")).help("version");
+    parser.add_argument("--output_def").default_value(string("")).help("version");
 
     // TODO: ICCAD 2022 only, remove me after contest
     get_iccad22_option(parser);
@@ -163,8 +165,14 @@ argparse::ArgumentParser get_option(int argc, char* argv[]) {
     parser.add_argument("--second_num_bin_y").default_value(int(1024)).help("").scan<'i', int>();
     parser.add_argument("--die_diff").default_value(double(0.10)).help("two die util difference").scan<'g', double>();
     parser.add_argument("--patoh_guide_ratio").default_value(double(0.00)).help("patoh guide ratio").scan<'g', double>();
+
+
     parser.add_argument("--rotate_180").default_value(string("false")).help("enable 180 degree rotate in 3D GP");
     parser.add_argument("--rotate_90").default_value(string("false")).help("enable 90 degree rotate in 3D GP");
+    parser.add_argument("--rotate_type").default_value(string("direct")).help("Loss Type");
+    parser.add_argument("--rotate_thre").default_value(double(0.30)).help("Rotate Threshold").scan<'g', double>();
+    parser.add_argument("--rotate_coef").default_value(int(1000)).help("Rotate Threshold").scan<'i', int>();
+
 
 
     // others

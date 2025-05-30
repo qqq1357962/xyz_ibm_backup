@@ -269,10 +269,12 @@ __global__ void  density_map_macro_overlay_cuda_deterministic_forward_kernel(
 
             scalar_t x_c = (x_l + x_h) / 2;
             scalar_t y_c = (y_l + y_h) / 2;
-            scalar_t x_rotate_l = x_c + (y_l - y_c) * unit_len[1] / unit_len[0];
-            scalar_t x_rotate_h = x_c + (y_h - y_c) * unit_len[1] / unit_len[0];
-            scalar_t y_rotate_l = y_c + (x_l - x_c) * unit_len[0] / unit_len[1];
-            scalar_t y_rotate_h = y_c + (x_h - x_c) * unit_len[0] / unit_len[1];
+            scalar_t x_len = (x_h - x_l) / 2;
+            scalar_t y_len = (y_h - y_l) / 2;
+            scalar_t x_rotate_l = x_c - y_len * unit_len[1] / unit_len[0];
+            scalar_t x_rotate_h = x_c + y_len * unit_len[1] / unit_len[0];
+            scalar_t y_rotate_l = y_c - x_len * unit_len[0] / unit_len[1];
+            scalar_t y_rotate_h = y_c + x_len * unit_len[0] / unit_len[1];
             int x_rotate_lf = lround(floor(x_rotate_l));
             int x_rotate_hf = lround(floor(x_rotate_h));
             int y_rotate_lf = lround(floor(y_rotate_l));
@@ -406,10 +408,12 @@ __global__ void __launch_bounds__(256, 4) density_map_macro_vertical_horizontal_
 
             scalar_t x_c = (x_l + x_h) / 2;
             scalar_t y_c = (y_l + y_h) / 2;
-            scalar_t x_rotate_l = x_c + (y_l - y_c) * unit_len[1] / unit_len[0];
-            scalar_t x_rotate_h = x_c + (y_h - y_c) * unit_len[1] / unit_len[0];
-            scalar_t y_rotate_l = y_c + (x_l - x_c) * unit_len[0] / unit_len[1];
-            scalar_t y_rotate_h = y_c + (x_h - x_c) * unit_len[0] / unit_len[1];
+            scalar_t x_len = (x_h - x_l) / 2;
+            scalar_t y_len = (y_h - y_l) / 2;
+            scalar_t x_rotate_l = x_c - y_len * unit_len[1] / unit_len[0];
+            scalar_t x_rotate_h = x_c + y_len * unit_len[1] / unit_len[0];
+            scalar_t y_rotate_l = y_c - x_len * unit_len[0] / unit_len[1];
+            scalar_t y_rotate_h = y_c + x_len * unit_len[0] / unit_len[1];
             int x_rotate_lf = lround(floor(x_rotate_l));
             int x_rotate_hf = lround(floor(x_rotate_h));
             int y_rotate_lf = lround(floor(y_rotate_l));
@@ -680,10 +684,12 @@ __global__ void density_map_overlay_cuda_deterministic_backward_kernel(
 
             scalar_t x_c = (x_l + x_h) / 2;
             scalar_t y_c = (y_l + y_h) / 2;
-            scalar_t x_rotate_l = x_c + (y_l - y_c) * unit_len[1] / unit_len[0];
-            scalar_t x_rotate_h = x_c + (y_h - y_c) * unit_len[1] / unit_len[0];
-            scalar_t y_rotate_l = y_c + (x_l - x_c) * unit_len[0] / unit_len[1];
-            scalar_t y_rotate_h = y_c + (x_h - x_c) * unit_len[0] / unit_len[1];
+            scalar_t x_len = (x_h - x_l) / 2;
+            scalar_t y_len = (y_h - y_l) / 2;
+            scalar_t x_rotate_l = x_c - y_len * unit_len[1] / unit_len[0];
+            scalar_t x_rotate_h = x_c + y_len * unit_len[1] / unit_len[0];
+            scalar_t y_rotate_l = y_c - x_len * unit_len[0] / unit_len[1];
+            scalar_t y_rotate_h = y_c + x_len * unit_len[0] / unit_len[1];
             int x_rotate_lf = lround(floor(x_rotate_l));
             int x_rotate_hf = lround(floor(x_rotate_h));
             int y_rotate_lf = lround(floor(y_rotate_l));
@@ -1117,7 +1123,7 @@ torch::Tensor density_map_cuda_forward(torch::Tensor normalize_node_info,
 
 //---------------------------------------------------------------------
 
-torch::Tensor macro_overlay_density_map_cuda_forward(torch::Tensor normalize_node_info,
+std::tuple<torch::Tensor, torch::Tensor> macro_overlay_density_map_cuda_forward(torch::Tensor normalize_node_info,
                                        torch::Tensor sorted_node_map,
                                        torch::Tensor aux_mat,
                                        torch::Tensor node_rotate_grad,
@@ -1157,6 +1163,8 @@ torch::Tensor macro_overlay_density_map_cuda_forward(torch::Tensor normalize_nod
         cudaMalloc(&aux_mat_uint64_ptr, aux_mat_uint64_size * sizeof(unsigned long long));
     }
 
+    auto node_rotate_grad2 = torch::zeros_like(node_rotate_grad);
+
     copyFromFloatAuxMat<<<cp_blocks, cp_threads, 0, stream>>>(
         aux_mat_uint64_ptr, aux_mat.data_ptr<float>(), scalar, inv_scalar, num_bin);
     AT_DISPATCH_ALL_TYPES(normalize_node_info.scalar_type(), "density_map_cuda_deterministic_forward", ([&] {
@@ -1187,14 +1195,14 @@ torch::Tensor macro_overlay_density_map_cuda_forward(torch::Tensor normalize_nod
                 unit_len.packed_accessor32<scalar_t, 1, torch::RestrictPtrTraits>(),
                 aux_mat.data_ptr<scalar_t>(),
                 sorted_node_map.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
-                node_rotate_grad.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
+                node_rotate_grad2.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
                 num_bin_x,
                 num_bin_y,
                 num_bin_z,
                 num_macros);
     }));
 
-    return aux_mat;
+    return {aux_mat, node_rotate_grad2};
 }  // END MODULE
 
 //---------------------------------------------------------------------

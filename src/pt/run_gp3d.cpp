@@ -317,17 +317,18 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeDat
     auto mov_node_size_top = data_2d.node_size_top.to(data.device);
     auto mov_node_size_bot = data_2d.node_size_bot.to(data.device);
     auto node_slide_grad =
-        torch::zeros(mov_node_size_top.size(0), torch::dtype(data.node_pos.dtype()).device(data.device));
-    auto node_slide_state = torch::zeros(mov_node_size_top.size(0), torch::dtype(data.node_pos.dtype()).device(data.device));
+        torch::zeros({mov_node_size_top.size(0), 2}, torch::dtype(data.node_pos.dtype()).device(data.device));
+    auto node_slide_state = torch::zeros({mov_node_size_top.size(0), 2}, torch::dtype(data.node_pos.dtype()).device(data.device));
     auto node_orient_grad =
         torch::zeros(mov_node_size_top.size(0), torch::dtype(data.node_pos.dtype()).device(data.device));
+    auto node_orient_state = torch::zeros({data.cell_mov_rhs - data.cell_mov_lhs}, mov_node_pos.options());
+
     if (st::setting.rotate_180) {
-        node_slide_state = node_slide_state + data.macro_mask.to(data.node_pos.dtype()) * 0.5;
+        node_slide_state = node_slide_state + data.macro_mask.unsqueeze(1).repeat({1, 2}).contiguous().to(data.node_pos.dtype()) * 0.501;
     }
-    auto rotate_state = torch::zeros({data.cell_mov_rhs - data.cell_mov_lhs}, mov_node_pos.options());
-    auto rotate_direction = torch::ones({data.cell_mov_rhs - data.cell_mov_lhs}, mov_node_pos.options());
+    
     if (rotate_90) {
-        rotate_state = rotate_state + data.macro_mask.to(data.node_pos.dtype()) * 0.5;
+        node_orient_state = node_orient_state + data.macro_mask.to(data.node_pos.dtype()) * 0.5;
     }
     auto overflow_overall = torch::ones({2}, mov_node_pos.options());
     std::function<std::tuple<torch::Tensor, torch::Tensor>(torch::Tensor)> obj_and_grad_fn =
@@ -345,9 +346,9 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeDat
          &node_slide_grad,
          &node_orient_grad,
          &node_slide_state,
-         &rotate_state,
+         &node_orient_state,
          &overflow_overall,
-         &rotate_direction
+         &rotate_90
          ](at::Tensor mov_node_pos) {
             auto node_pos_channel = mov_node_pos.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs), 2});
             auto ratio = node_pos_channel / float(data.__ori_die_hz__);
@@ -366,10 +367,10 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeDat
                                                         data,
                                                         (data_2d.node_die) * st::setting.patoh_guide_ratio,
                                                         node_slide_state,
-                                                        rotate_state,
+                                                        node_orient_state,
                                                         current_mov_node_size,
                                                         data.node_to_num_pins,
-                                                        rotate_direction);
+                                                        rotate_90);
 
             node_slide_grad = slide_grad;
             node_orient_grad = orient_grad;
@@ -392,7 +393,7 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeDat
 
     /* evaluation function */
     std::function<tuple<torch::Tensor, torch::Tensor, torch::Tensor>(torch::Tensor)> evaluator_fn =
-        [&trunc_node_pos_fn, &mov_node_size, &init_density_map, &density_map_layers, &conn_fix_node_pos, &ps, &data, &node_slide_state](
+        [&trunc_node_pos_fn, &mov_node_size, &init_density_map, &density_map_layers, &conn_fix_node_pos, &ps, &data, &node_slide_state, &node_orient_state, &rotate_90](
             at::Tensor mov_node_pos) {
             return GP3D::fast_evaluator(mov_node_pos,
                                         trunc_node_pos_fn,
@@ -402,7 +403,9 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeDat
                                         conn_fix_node_pos,
                                         ps,
                                         data,
-                                        node_slide_state);
+                                        node_slide_state,
+                                        node_orient_state,
+                                        rotate_90);
         };
     // FIXME: for quitting gp3d when init_lr nan
     torch::Tensor node_pos_2d_backup = mov_node_pos.clone();
@@ -422,8 +425,8 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeDat
                       data,
                       (data_2d.node_die) * st::setting.patoh_guide_ratio,
                       node_slide_state,
-                      rotate_state,
-                      rotate_direction);
+                      node_orient_state,
+                      rotate_90);
     // FIXME
     double init_lr = 1e5;
     if(!st::setting.skip_gp3d)
@@ -523,45 +526,45 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeDat
         conn_fix_node_pos = conn_fix_node_pos.detach();
 
         if (st::setting.rotate_180) {
-            float ovfl_thre = 0.4;
-            if (rotate_90) {
-                node_slide_grad = node_slide_grad * 10;
-            }
-
+            float ovfl_thre = st::setting.rotate_thre;
+            // if (rotate_90) {
+            //     node_slide_grad = node_slide_grad * 2;
+            // }
+            
             if (step_ovfl > ovfl_thre) {
-                // torch::Tensor cond1 = (node_slide_state < 0.5) & (node_slide_grad > 0);
-                // torch::Tensor cond2 = (node_slide_state > 0.5) & (node_slide_grad < 0);
-                // torch::Tensor mask = cond1 | cond2;
-                // torch::Tensor node_slide_grad_square = torch::pow(node_slide_grad, 2);
-                // torch::Tensor node_edge_distance = 0.5 - torch::abs(node_slide_state - 0.5);
-                // node_slide_variance = node_slide_variance + torch::pow(node_edge_distance, 2) * torch::pow(node_orient_grad, 2);
                 node_slide_state = (node_slide_state + node_slide_grad).clamp(0, 1).detach();
-                if (rotate_90) {
-                    rotate_state = (rotate_state + node_orient_grad).clamp(0, 1).detach();
-                }
             }
             else {
                 auto node_slide_distance = node_slide_state - 0.5;
                 auto node_slide_norm = (0.5 - torch::abs(node_slide_distance)).clamp(0, 0.5);
                 node_slide_distance = (node_slide_distance + 1e-6) / (torch::abs(node_slide_distance) + 1e-6);
                 node_slide_state = (node_slide_state + node_slide_grad * node_slide_norm + node_slide_distance / step_ovfl * 0.025).clamp(0, 1).detach();
-                
-                if (rotate_90) {
-                    auto node_rotate_distance = rotate_state - 0.5;
+            }
+
+            // ovfl_thre = 0.3;
+            if (rotate_90) {
+                if (step_ovfl > ovfl_thre) {
+                    node_orient_state = (node_orient_state + node_orient_grad).clamp(0, 1).detach();
+                }
+                else {
+                    auto node_rotate_distance = node_orient_state - 0.5;
                     auto node_rotate_norm = (0.5 - torch::abs(node_rotate_distance)).clamp(0, 0.5);
                     node_rotate_distance = (node_rotate_distance + 1e-6) / (torch::abs(node_rotate_distance) + 1e-6);
-                    rotate_state = (rotate_state + node_orient_grad * node_rotate_norm + node_rotate_distance / step_ovfl * 0.025).clamp(0, 1).detach();
+                    node_orient_state = (node_orient_state + node_orient_grad * node_rotate_norm + node_rotate_distance / step_ovfl * 0.025).clamp(0, 1).detach();
                 }
-                
             }
         }
 
-        auto non_zero_indices = torch::nonzero(node_orient_grad);
-        auto non_zero_num = torch::count_nonzero(node_orient_grad).item<int>();
-        for (int i = 0; i < non_zero_num; i++) {
-            cout << node_slide_state[non_zero_indices[i].item<int>()].item<float>() << " ";
-        }
-        cout << endl;
+        // auto non_zero_indices = torch::nonzero(node_orient_grad);
+        // auto non_zero_num = torch::count_nonzero(node_orient_grad).item<int>();
+        // for (int i = 0; i < non_zero_num; i++) {
+        //     cout << node_slide_state[non_zero_indices[i].item<int>()][0].item<float>() << " ";
+        // }
+        // cout << endl;
+        // for (int i = 0; i < non_zero_num; i++) {
+        //     cout << node_slide_state[non_zero_indices[i].item<int>()][1].item<float>() << " ";
+        // }
+        // cout << endl;
         auto [hpwl, overflows, mov_density_map] = evaluator_fn(mov_node_pos);
         overflows = overflow_overall.clone();
 
@@ -620,9 +623,9 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeDat
             auto parter = (node_pos_channel > slicer);
             auto node_die = torch::_cast_Int(parter);
 
-            auto [hpwl1, hpwl2, hpwl_ovlp] = evaluate_wl_cross_chip(node_pos.to(device), node_die.to(device), data);
-            logger.info("bot: %f, top: %f, overlap: %f", 
-            hpwl1.item<float>(), hpwl2.item<float>(), hpwl_ovlp.item<float>());
+            // auto [hpwl1, hpwl2, hpwl_ovlp] = evaluate_wl_cross_chip(node_pos.to(device), node_die.to(device), data);
+            // logger.info("bot: %f, top: %f, overlap: %f", 
+            // hpwl1.item<float>(), hpwl2.item<float>(), hpwl_ovlp.item<float>());
             
             if (need_stop || st::setting.draw_placement || ps.need_to_early_stop() || data_2d.node_wgt_grad.numel()
                 || iteration == st::setting.inner_iter-1) {
@@ -698,12 +701,11 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeDat
     }
     auto non_zero_indices = torch::nonzero(node_slide_grad);
     auto non_zero_num = torch::count_nonzero(node_slide_grad).item<int>();
-    auto node_rotate = node_slide_state.to(torch::kInt32) * 2;
+    auto node_rotate = node_slide_state.to(torch::kInt32).select(1, 0) * 2;
     if (rotate_90) {
-        node_rotate = rotate_state.to(torch::kInt32) * 3;
+        node_rotate = (1 - node_orient_state.to(torch::kInt32)) * 2 * node_slide_state.to(torch::kInt32).select(1, 0) +
+                      node_orient_state.to(torch::kInt32) * (3 - 2 * node_slide_state.to(torch::kInt32).select(1, 1));
     }
-
-
 
     // iteration = 1;
     /* retrieve best score and evaluate without filler */
@@ -826,7 +828,7 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeDat
         draw_fig_with_cairo_cpp_cross_chip(node_pos_draw_cp, node_size_draw_cp, data, info3);
     }
 
-    if (ps.force_coeff) return {node_rotate.to(torch::kCPU), mov_node_pos.to(torch::kCPU), rotate_state.to(torch::kCPU)};
+    if (ps.force_coeff) return {node_rotate.to(torch::kCPU), mov_node_pos.to(torch::kCPU), node_orient_state.to(torch::kCPU)};
 
     // if (ps.force_coeff) node_pos_2d_ground = run_gp2d_grid(data_2d);
     node_pos_2d_ground = node_pos.index({Slice(data_2d.cell_mov_lhs, data_2d.cell_mov_rhs), Slice(0, 2)});
@@ -960,5 +962,5 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeDat
         torch::save(node_die, pt_dir);
     }
 
-    return {node_rotate, node_pos, rotate_state};
+    return {node_rotate, node_pos, node_orient_state};
 }

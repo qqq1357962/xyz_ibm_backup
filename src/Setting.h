@@ -42,6 +42,8 @@ public:
     std::string load_stage;
     std::string load_file;
     std::string load_json;
+    std::string load_def_template;
+    std::string output_def;
     int log_freq;
 
     /* model params */
@@ -103,8 +105,12 @@ public:
     int global_const;
     double die_diff;
     double patoh_guide_ratio;
+
     bool rotate_180 = false;
     bool rotate_90 = false;
+    std::string rotate_type;
+    double rotate_thre;
+    int rotate_coef;
 
     // dp
     bool save_model;

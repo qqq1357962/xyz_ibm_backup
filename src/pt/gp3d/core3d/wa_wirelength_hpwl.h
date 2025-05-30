@@ -20,13 +20,13 @@ public:
                                  at::Tensor net_mask,
                                  at::Tensor net_weight,
                                  double gamma,
+                                 bool rotate_90,
                                  at::Tensor hpwl_scale,
                                  at::Tensor ratio_difference,
                                  at::Tensor macro_mask,
                                  at::Tensor node_die_patoh,
                                  at::Tensor current_node_slide_state,
-                                 at::Tensor current_node_rotate_state,
-                                 at::Tensor rotate_direction,
+                                 at::Tensor current_node_orient_state,
                                  at::Tensor die_info = torch::empty({0}),
                                  at::Tensor node_die = torch::empty({0})) {
         // Save data for backward in context
@@ -46,31 +46,52 @@ public:
         auto ratio_difference_area = ratio_difference.prod(1).sqrt();
         ratio = ratio.squeeze(1);
         auto ratio_multiply = (ratio_difference_area - 1) * 0.39;
-        // cout << ratio_multiply.sizes() << endl;
         ratio_multiply = (node_die_patoh - (node_die_patoh.max() + node_die_patoh.min()) / 2).to(ratio_difference_area.options());
-        // cout << ratio_multiply << endl;
         
-        wa_wirelength_hpwl::update_rel_cpos_rotate(pin_rel_cpos, pin_id2node_id, pin_rel_cpos_difference, current_node_slide_state, current_node_rotate_state, rotate_direction);
+        // wa_wirelength_hpwl::update_rel_cpos_rotate(pin_rel_cpos, pin_id2node_id, pin_rel_cpos_difference, current_node_slide_state, current_node_rotate_state, rotate_direction);
+
+        auto pin_rel_cpos_d = pin_rel_cpos.unsqueeze(1).repeat({1, 2, 1}).contiguous();
+        auto direction = torch::ones_like(current_node_slide_state);
+        wa_wirelength_hpwl::update_rel_cpos_overlay(
+            pin_rel_cpos_d, pin_id2node_id, pin_rel_cpos_difference, current_node_slide_state, macro_mask, direction, rotate_90);
 
         auto net_weight_naive = torch::ones({net_weight.size(0)}, dtype(torch::kFloat)).to(net_weight.device());
         if (st::setting.wa_z_model == "xy") {
             net_weight_naive = net_weight;
         }
+        // auto [partial_wa_wl, node_grad, partial_hpwl, node_slide_grad, node_orient_grad] =
+        //     wa_wirelength_hpwl::merged_forward_backward_with_hpwl(node_pos,
+        //                                                           node_die,
+        //                                                           pin_id2node_id,
+        //                                                           pin_rel_cpos,
+        //                                                           node2pin_list,
+        //                                                           node2pin_list_end,
+        //                                                         //   pin_rel_cpos_real,
+        //                                                           hyperedge_list,
+        //                                                           hyperedge_list_end,
+        //                                                           net_mask,
+        //                                                           net_weight_naive,
+        //                                                           macro_mask,
+        //                                                           ratio_multiply,
+        //                                                           gamma);
+
         auto [partial_wa_wl, node_grad, partial_hpwl, node_slide_grad, node_orient_grad] =
-            wa_wirelength_hpwl::merged_forward_backward_with_hpwl(node_pos,
-                                                                  node_die,
-                                                                  pin_id2node_id,
-                                                                  pin_rel_cpos,
-                                                                  node2pin_list,
-                                                                  node2pin_list_end,
-                                                                //   pin_rel_cpos_real,
-                                                                  hyperedge_list,
-                                                                  hyperedge_list_end,
-                                                                  net_mask,
-                                                                  net_weight_naive,
-                                                                  macro_mask,
-                                                                  ratio_multiply,
-                                                                  gamma);
+            wa_wirelength_hpwl::merged_forward_backward_overlay_with_hpwl(node_pos,
+                                                                          node_die,
+                                                                          pin_id2node_id,
+                                                                          pin_rel_cpos_d,
+                                                                          node2pin_list,
+                                                                          node2pin_list_end,
+                                                                          hyperedge_list,
+                                                                          hyperedge_list_end,
+                                                                          current_node_orient_state,
+                                                                          net_mask,
+                                                                          net_weight,
+                                                                          macro_mask,
+                                                                          ratio_multiply,
+                                                                          direction,
+                                                                          gamma);
+
         // auto [partial_wa_wl, node_grad, partial_hpwl] =
         //     wa_wirelength_hpwl::merged_forward_backward_with_accurate_hpwl(node_pos,
         //                                                           node_die,
@@ -85,7 +106,6 @@ public:
         //                                                           net_mask,
         //                                                           net_weight_naive,
         //                                                           gamma);
-
 
         // torch::Tensor node_optim_info = torch::zeros_like(node_die, dtype(torch::kInt));
         // auto [partial_wa_wl1, node_grad1, partial_hpwl1] =

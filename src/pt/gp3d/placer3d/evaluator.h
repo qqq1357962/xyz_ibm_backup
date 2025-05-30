@@ -16,5 +16,7 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> fast_evaluator(torch::Tensor 
                                                    torch::Tensor conn_fix_node_pos,
                                                    ParamScheduler& ps,
                                                    NodeData3D& data,
-                                                   torch::Tensor node_slide_state);
+                                                   torch::Tensor node_slide_state,
+                                                   torch::Tensor node_orient_state,
+                                                   bool rotate_90);
 }  // namespace GP3D
