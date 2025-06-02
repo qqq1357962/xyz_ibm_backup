@@ -444,15 +444,20 @@ string expand_name(const string& name) {
 
 bool Database::writeComponents(ofstream& ofs, const std::vector<int> node_selected) {
     int nCells = cells.size();
-    ofs << "COMPONENTS " << nCells << " ;" << endl;
+    int cell_num = 0;
+    for (int i = 0; i < nCells; i++) {
+        Cell* cell = cells[i];
+        if (node_selected[cell->gpdb_id] == 1) cell_num++;
+    }
+    ofs << "COMPONENTS " << cell_num << " ;" << endl;
     // ofs << "COMPONENTS " << nCells << " ;" << endl;
     for (int i = 0; i < nCells; i++) {
         Cell* cell = cells[i];
         if (node_selected[cell->gpdb_id] == 1) {
 #ifdef WRITE_BUFFER
-        ostringstream oss;
+            ostringstream oss;
 #else
-        ofstream& oss = ofs;
+            ofstream& oss = ofs;
 #endif
             // const string& cellName = expand_name(cell->name());
             oss << "   - " << expand_name(cell->name()) << " " << cell->ctype()->name;
@@ -464,8 +469,8 @@ bool Database::writeComponents(ofstream& ofs, const std::vector<int> node_select
                 //    << getOrient(cell->orient())
                 //    << " ;" << endl;
             } else if (cell->placed()) {
-                oss << " + PLACED ( " << static_cast<int>(cell->lx()) << " " << static_cast<int>(cell->ly()) << " ) " << getOrient(cell->orient()) << " ;"
-                    << endl;
+                oss << " + PLACED ( " << static_cast<int>(cell->lx()) << " " << static_cast<int>(cell->ly()) << " ) "
+                    << getOrient(cell->orient()) << " ;" << endl;
                 // ofs << "      + PLACED ( " << cell->lx() << " " << cell->ly() << " ) "
                 //    << getOrient(cell->orient())
                 //    << " ;" << endl;
@@ -474,8 +479,8 @@ bool Database::writeComponents(ofstream& ofs, const std::vector<int> node_select
                 // ofs << "      + UNPLACED ;" << endl;
             }
 #ifdef WRITE_BUFFER
-        string lines = oss.str();
-        writeBuffer(ofs, lines);
+            string lines = oss.str();
+            writeBuffer(ofs, lines);
 #endif
         }
     }
@@ -643,13 +648,20 @@ bool Database::write_Openroad(const string& inputDef, const string& outputDef, c
     int new_dieHY = static_cast<int>(std::ceil(dieHY / sqrt(2) * 1.1));
 
     string line;
+    bool load_pin = false;
     while (getline(ifs, line)) {
         istringstream iss(line);
         string s;
         if (!(iss >> s)) {
-            ofs << line << endl;
+            if (load_pin) {
+                ofs << line << "+ PORT" << endl;
+            } else {
+                ofs << line << endl;
+            }
             continue;
         } else if (s != "COMPONENTS" && s != "NETS") {
+            if (s == "PINS") load_pin = true;
+            if (s == "END") load_pin = false;
             ofs << line << endl;
             continue;
         } 
