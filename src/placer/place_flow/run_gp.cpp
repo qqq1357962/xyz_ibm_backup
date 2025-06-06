@@ -72,7 +72,7 @@ torch::Tensor run_gp(NodeData& data,
 
     st::setting.use_filler = true;
     st::setting.early_stop_check_plateau = false;
-    st::setting.magic_hpwl *= 2;
+    // st::setting.magic_hpwl *= 2;
     st::setting.density_weight_coef -= 0.01;
     // st::setting.wa_coeff += 1;
     st::setting.wa_coeff /= 2;
@@ -230,11 +230,11 @@ torch::Tensor run_gp(NodeData& data,
                 torch::Tensor overflow_sum = ((mov_density_map - st::setting.target_density) * data.bin_area)
                                                  .clamp_(0.0)
                                                  .sum();  // TODO: each layer different ovfl
-                torch::Tensor area_sum = (mov_density_map * data.bin_area)
-                                                 .clamp_(0.0)
-                                                 .sum();  // TODO: each layer different ovfl
-                return overflow_sum / area_sum;
-                // return overflow_sum / mov_cell_areas_without_macro[i];
+                // torch::Tensor area_sum = (mov_density_map * data.bin_area)
+                //                                  .clamp_(0.0)
+                //                                  .sum();  // TODO: each layer different ovfl
+                // return overflow_sum / area_sum;
+                return overflow_sum / mov_cell_areas_without_macro[i];
             };
         auto overflow_helper_cc = make_tuple(mov_lhs, mov_rhs, overflow_fn_cc);
         density_map_layers.emplace_back(data.unit_len,
@@ -260,38 +260,9 @@ torch::Tensor run_gp(NodeData& data,
         conn_fix_node_pos = data.node_pos.index({Slice(lhs, rhs), "..."});
     }
     conn_fix_node_pos = conn_fix_node_pos.detach();
-    // torch::Tensor macro_mask = torch::zeros({mov_node_pos_all.size(0), 1});
-    // auto macro_mask2 = data.macro_mask;
     torch::Tensor macro_mask = data.macro_mask;
     macro_mask = macro_mask.to(device);
-    // auto node_size_x = mov_node_size_all.index({"...", 0});
-    // auto node_size_y = mov_node_size_all.index({"...", 1});
-    // auto node_die = data.node_die;
-    // auto height_top = data.rowHeights;
-    // for(int node_id=0;node_id<data.node_pos.size(0);node_id++)
-    // {
-    //     //data.
-    //     if(node_die[node_id].item<int>()<0||node_die[node_id].item<int>()>1)
-    //     {
-    //         continue;
-    //     }
-    //     int size_y = (node_size_bot[node_id][1]+node_size_top[node_id][1]).item<int>();
-    //     int die = node_die[node_id].item<int>();
-    //     float height = data.rowHeights[die].item<float>();
-    //     if (size_y>height) {
-    //         //float area = node_size_x[node_id].item<float>() * size_y;
-    //         //if (area > 0) {
-    //             macro_mask[node_id]=1;
-    //         //}
-    //     }
-    // }
-    // for(int node_id=0;node_id<data.node_pos.size(0);node_id++)
-    // {
-    //     if(macro_mask[node_id].item<int>() != macro_mask2[node_id].item<int>())
-    //     {
-    //         int debuggggggg=1;
-    //     }
-    // }
+
     vector<int> macro_list;
     for (int i = 0; i < data.cell_mov_rhs; i++) {
         if (data.macro_mask[i].item<int>() == 1) {
@@ -310,6 +281,7 @@ torch::Tensor run_gp(NodeData& data,
          &conn_fix_node_pos,
          &ps,
          &data,
+         &via_data,
          &move_macro,
          &macro_list,
          &iter_num,
@@ -324,24 +296,19 @@ torch::Tensor run_gp(NodeData& data,
                                                                 density_map_layers,
                                                                 conn_fix_node_pos,
                                                                 ps,
-                                                                data);
+                                                                data,
+                                                                via_data);
             iter_num++;
             if (!move_macro) {
                 for (auto macro_id : macro_list) {
                     grad[macro_id] = 0;
                 }
             }
-            if (true) {
+            if (st::setting.skip_2d) {
                 grad.index({torch::indexing::Slice(data.cell_mov_lhs, data.cell_mov_rhs), torch::indexing::Slice(0, 2)}) = 0.0;
+            } else {
+                grad.index({torch::indexing::Slice(data.iopin_mov_lhs, data.iopin_mov_rhs), torch::indexing::Slice(0, 2)}) = 0.0;
             }
-            // if(iter_num>1000&&iter_num<=2000)
-            // {
-            //     float size_ratio = float(iter_num-1000)/1000;
-            //     for(auto macro_id:macro_list)
-            //     {
-            //         mov_node_size_all[macro_id]=size_ratio*mov_node_size_all_backup[macro_id];
-            //     }
-            // }
             return std::make_tuple(loss, grad);
         };
 
@@ -562,11 +529,11 @@ torch::Tensor run_gp(NodeData& data,
         auto [hpwls, overflows, tmp1] = evaluator_fn(mov_node_pos_all);
         // ps.step(hpwls.sum().item<float>(), overflows.index({Slice(0, 2)}).sum().item<float>() / 2, mov_node_pos_all);
         ps.steps(hpwls, overflows, mov_node_pos_all);
-        if (st::setting.num_den_layer == 3) {
-            if (overflows[2].item<float>() < st::setting.stop_overflow_via) {
-                st::setting.num_den_layer = 2;
-            }
-        }
+        // if (st::setting.num_den_layer == 3 && !st::setting.skip_2d) {
+        //     if (overflows[2].item<float>() < st::setting.stop_overflow_via) {
+        //         st::setting.num_den_layer = 2;
+        //     }
+        // }
         if (iteration % st::setting.log_freq == 0 || iteration == st::setting.inner_iter - 1 ||
             (iteration >= st::setting.minGPStep && ps.need_to_early_stop())) {
             logger.info(
@@ -640,6 +607,8 @@ torch::Tensor run_gp(NodeData& data,
     data.to(torch::kCPU);
     via_data.to(torch::kCPU);
     node_pos = node_pos.to(torch::kCPU);
+
+    if (st::setting.visualize_curve) ps.visualize();
 
     if (st::setting.block_row) {
         data.node_size.index({"...", 1}) /= 0.9;  // TODO: config

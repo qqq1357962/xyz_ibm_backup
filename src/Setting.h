@@ -105,6 +105,7 @@ public:
     int global_const;
     double die_diff;
     double patoh_guide_ratio;
+    bool skip_2d;
 
     bool rotate_180 = false;
     bool rotate_90 = false;

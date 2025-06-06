@@ -198,6 +198,7 @@ void Setting::parse(argparse::ArgumentParser args) {
     second_num_bin_y = args.get<int>("--second_num_bin_y");
     die_diff = args.get<double>("--die_diff");
     patoh_guide_ratio = args.get<double>("--patoh_guide_ratio");
+    skip_2d = str2bool(args.get<std::string>("--skip_2d"));
 
     
     rotate_180 = str2bool(args.get<std::string>("--rotate_180"));

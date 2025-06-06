@@ -73,6 +73,9 @@ void ParamScheduler::update_precond_weight() {
 void ParamScheduler::steps(torch::Tensor hpwls, torch::Tensor overflows, torch::Tensor node_pos) {
     double hpwl = hpwls.sum().item<double>();
     double overflow = overflows.index({Slice(0, 2)}).mean().item<float>();
+    if (st::setting.skip_2d) {
+        overflow = overflows[2].item<float>();
+    }
     // double overflow = overflows[0].item<float>() * 0.45 + overflows[1].item<float>() * 0.45 + overflows[2].item<float>() * 0.1;
     // double overflow = overflows.index({Slice(0, 1)}).mean().item<float>();
     push_metric(hpwl, overflow, iter);

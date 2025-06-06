@@ -76,6 +76,9 @@ ParamScheduler::ParamScheduler(NodeData& data) : recorder(_metrics) {
     max_life = 30;
     life = max_life;
     stop_overflow = st::setting.stop_overflow;
+    if (st::setting.skip_2d) {
+        stop_overflow = st::setting.stop_overflow_via;
+    }
 
     use_precond = st::setting.use_precond;
     skip_update = false;
@@ -380,17 +383,28 @@ void ParamScheduler::visualize() {
             y.at(i) = recorder.get(key, i);
         }
 
+        // plt::plot(x, y);
+        // plt::title(key);
+        // vector<int> xtick = {0, (int)(view - 1)};
+        // plt::xticks(xtick);
+
+        // std::filesystem::path current_dir(std::filesystem::current_path());
+        // std::filesystem::path result_dir(st::setting.result_dir);
+        // std::filesystem::path exp_id(st::setting.exp_id);
         std::filesystem::path eval(std::string("eval"));
         std::filesystem::path fig_root = logger.res_root / eval;
         if (!std::filesystem::exists(fig_root)) {
             std::filesystem::create_directories(fig_root);
         }
         // cout << res_root << endl;
-        std::string fig_name = string("/ms_" + key + ".png");
+        std::string fig_name = string("/ms_2.5_" + key + ".png");
         cout << fig_name << endl;
 
+        // plt::save(fig_path);
+        // plt::close();
+
         plot_pt(y,
-                (char *)"plot",
+                (char *)"imshow",
                 (char *)fig_root.string().c_str(),
                 (char *)fig_name.c_str());
     }

@@ -181,7 +181,8 @@ tuple<torch::Tensor, torch::Tensor> calc_obj_and_grad_multi_circuit(
     vector<ElectronicDensityLayer>& density_map_layers,
     torch::Tensor conn_fix_node_pos,
     ParamScheduler& ps,
-    NodeData& data) {
+    NodeData& data,
+    PlaceData& via_data) {
     // we disable merged_forward_backward in C++ version since it is quite complicated
     auto [mov_lhs, mov_rhs] = data.movable_index;
     mov_node_pos = constraint_fn(mov_node_pos);
@@ -242,14 +243,22 @@ tuple<torch::Tensor, torch::Tensor> calc_obj_and_grad_multi_circuit(
 
     /* 3 density layers: cell | cell | via */
     // for (int i = 0; i < 2; i++) {  // TODO:
-    for (int i = 0; i < st::setting.num_den_layer; i++) {  // TODO:
-        torch::Tensor node_weight = data.mov_node_weights[i];
+    if (st::setting.skip_2d) {
+        torch::Tensor node_weight = data.mov_node_weights[2];
         auto den_val_list =
-            density_map_layers[i].forward(mov_node_pos, mov_node_size, init_density_maps[i], node_weight, false);
-        den_losses[i] = den_val_list[0];
+            density_map_layers[2].forward(mov_node_pos, mov_node_size, init_density_maps[2], node_weight, false);
+        den_loss = den_val_list[0];
+    } else {
+        for (int i = 0; i < st::setting.num_den_layer; i++) {  // TODO:
+            torch::Tensor node_weight = data.mov_node_weights[i];
+            auto den_val_list =
+                density_map_layers[i].forward(mov_node_pos, mov_node_size, init_density_maps[i], node_weight, false);
+            den_losses[i] = den_val_list[0];
+        }
+        den_loss = st::setting.num_den_layer == 3 ? (den_losses[0] + den_losses[1] + den_losses[2])
+                                                  : (den_losses[0] + den_losses[1]);
     }
-    den_loss = st::setting.num_den_layer == 3 ? (den_losses[0] + den_losses[1] + den_losses[2])
-                                                            : (den_losses[0] + den_losses[1]);
+    
 
     torch::Tensor loss = calc_loss(wl_loss, den_loss, ps);
     loss.backward();

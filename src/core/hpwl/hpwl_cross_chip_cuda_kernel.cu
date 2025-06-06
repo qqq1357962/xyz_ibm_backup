@@ -30,7 +30,12 @@ __global__ void hpwl_cross_chip_cuda_kernel(
     const torch::PackedTensorAccessor32<int64_t, 1, torch::RestrictPtrTraits> hyperedge_list,
     const torch::PackedTensorAccessor32<int64_t, 1, torch::RestrictPtrTraits> hyperedge_list_end,
     torch::PackedTensorAccessor32<scalar_t, 3, torch::RestrictPtrTraits> partial_hpwl,
-    torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> partial_ovlp_hpwl, int num_nets) {
+    torch::PackedTensorAccessor32<scalar_t, 2, torch::RestrictPtrTraits> partial_ovlp_hpwl,
+    torch::PackedTensorAccessor32<scalar_t, 3, torch::RestrictPtrTraits> partial_cross_hpwl,
+    torch::PackedTensorAccessor32<scalar_t, 3, torch::RestrictPtrTraits> partial_one_die_hpwl,
+    torch::PackedTensorAccessor32<scalar_t, 1, torch::RestrictPtrTraits> cut_comp, 
+    torch::PackedTensorAccessor32<int64_t, 1, torch::RestrictPtrTraits> total_pin, 
+    int num_nets) {
     const int index = blockIdx.x * blockDim.x + threadIdx.x;
     const int i = index >> 1;     // pin index
     if (i < num_nets) {           // TODO:  && net_mask[i]
@@ -49,11 +54,18 @@ __global__ void hpwl_cross_chip_cuda_kernel(
         scalar_t x_max_bot = 0;
         scalar_t x_min_top = 0;
         scalar_t x_max_top = 0;
+        int has_cut = 0;
+        int pin_num = 0;
 
         for (int64_t idx = start_idx; idx < end_idx; idx++) {
             int64_t pin_id = hyperedge_list[idx];  // FIXME: fix bug: idx error
             scalar_t xx = pin_pos[pin_id][c];
+            if (pin_die[pin_id] == 2) {
+                has_cut = 1;
+                pin_num--;
+            }
             if (pin_die[pin_id] == 0 || pin_die[pin_id] == 2) {
+                pin_num++;
                 if (bot_count == 0) {
                     x_min_bot = xx;
                     x_max_bot = xx;
@@ -64,6 +76,7 @@ __global__ void hpwl_cross_chip_cuda_kernel(
                 bot_count++;
             }
             if (pin_die[pin_id] == 1 || pin_die[pin_id] == 2) {  // FIXME: fix bug: if <- else if
+                pin_num++;
                 if (top_count == 0) {
                     x_min_top = xx;
                     x_max_top = xx;
@@ -74,8 +87,17 @@ __global__ void hpwl_cross_chip_cuda_kernel(
                 top_count++;
             }
         }
+        cut_comp[i] += has_cut;
         partial_hpwl[0][i][c] = abs(x_max_bot - x_min_bot);
         partial_hpwl[1][i][c] = abs(x_max_top - x_min_top);
+        if (has_cut == 1) {
+            partial_cross_hpwl[0][i][c] = abs(x_max_bot - x_min_bot);
+            partial_cross_hpwl[1][i][c] = abs(x_max_top - x_min_top);
+        } else {
+            partial_one_die_hpwl[0][i][c] = abs(x_max_bot - x_min_bot);
+            partial_one_die_hpwl[1][i][c] = abs(x_max_top - x_min_top);
+        }
+        total_pin[i] = pin_num;
 
         scalar_t x_max_mid = min(x_max_bot, x_max_top);
         scalar_t x_min_mid = max(x_min_bot, x_min_top);
@@ -101,6 +123,17 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> hpwl_cross_chip_cuda(
     auto partial_ovlp_hpwl =
         torch::zeros({num_nets, num_channels}, torch::dtype(pin_pos.dtype()).device(pin_pos.device()));
 
+    auto partial_cross_hpwl =
+        torch::zeros({2, num_nets, num_channels}, torch::dtype(pin_pos.dtype()).device(pin_pos.device()));
+    
+    auto partial_one_die_hpwl =
+        torch::zeros({2, num_nets, num_channels}, torch::dtype(pin_pos.dtype()).device(pin_pos.device()));
+
+    auto total_pin = torch::zeros({num_nets}, torch::dtype(torch::kInt64).device(pin_pos.device()));
+
+    auto cut_comp =
+        torch::zeros({num_nets}, torch::dtype(pin_pos.dtype()).device(pin_pos.device()));
+
     const int threads = 128;
     const int blocks = (num_pins * 2 + threads - 1) / threads;
 
@@ -123,8 +156,18 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> hpwl_cross_chip_cuda(
                                   hyperedge_list_end.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
                                   partial_hpwl.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
                                   partial_ovlp_hpwl.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
+                                  partial_cross_hpwl.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
+                                  partial_one_die_hpwl.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
+                                  cut_comp.packed_accessor32<scalar_t, 1, torch::RestrictPtrTraits>(),
+                                  total_pin.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
                                   num_nets);
                           }));
+
+    // printf("cross_hpwl_bot: %d\n", (partial_cross_hpwl.index({0, "..."})).sum(1).sum().item<int>());
+    // printf("one_die_hpwl_bot: %d\n", (partial_one_die_hpwl.index({0, "..."})).sum(1).sum().item<int>());
+    // printf("cross_hpwl_top: %d\n", (partial_cross_hpwl.index({1, "..."})).sum(1).sum().item<int>());
+    // printf("one_die_hpwl_top: %d\n", (partial_one_die_hpwl.index({1, "..."})).sum(1).sum().item<int>());
+    // printf("total pins: %ld\n", total_pin.sum().item<int64_t>());
 
     // return {torch::sum((partial_hpwl.index({0, "..."})).sum(1)),
     //         torch::sum((partial_hpwl.index({1, "..."})).sum(1))};  // TODO:
@@ -281,6 +324,16 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> hpwl_formatted_cuda(
         torch::zeros({2, num_nets, num_channels}, torch::dtype(pin_pos.dtype()).device(pin_pos.device()));
     auto partial_ovlp_hpwl =
         torch::zeros({num_nets, num_channels}, torch::dtype(pin_pos.dtype()).device(pin_pos.device()));
+    auto cut_comp =
+        torch::zeros({num_nets}, torch::dtype(pin_pos.dtype()).device(pin_pos.device()));
+
+    auto partial_cross_hpwl =
+        torch::zeros({2, num_nets, num_channels}, torch::dtype(pin_pos.dtype()).device(pin_pos.device()));
+    
+    auto partial_one_die_hpwl =
+        torch::zeros({2, num_nets, num_channels}, torch::dtype(pin_pos.dtype()).device(pin_pos.device()));
+
+    auto total_pin = torch::zeros({num_nets}, torch::dtype(torch::kInt64).device(pin_pos.device()));
 
     AT_DISPATCH_ALL_TYPES(pin_pos.scalar_type(), "hpwl_cross_chip", ([&] {
                               hpwl_cross_chip_cuda_kernel<scalar_t><<<blocks, threads, 0, stream>>>(
@@ -290,6 +343,10 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> hpwl_formatted_cuda(
                                   hyperedge_list_end.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
                                   partial_hpwl.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
                                   partial_ovlp_hpwl.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
+                                  partial_cross_hpwl.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
+                                  partial_one_die_hpwl.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
+                                  cut_comp.packed_accessor32<scalar_t, 1, torch::RestrictPtrTraits>(),
+                                  total_pin.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
                                   num_nets);
                           }));
     // TODO: hardcode die_scale & site_width

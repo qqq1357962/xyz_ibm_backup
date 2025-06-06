@@ -54,7 +54,7 @@ __global__ void masked_scale_hpwl_cuda_kernel(
     int num_nets) {
     const int index = blockIdx.x * blockDim.x + threadIdx.x;
     const int i = index >> 1;  // net index
-    if (i < num_nets && net_mask[i]) {
+    if (i < num_nets) {
         const int c = index & 1;  // channel index
         int64_t start_idx = 0;
         if (i != 0) {
@@ -265,12 +265,15 @@ __global__ void wa_wirelength_masked_kernel(
     const torch::PackedTensorAccessor32<bool, 1, torch::RestrictPtrTraits> net_mask,
     torch::PackedTensorAccessor32<float, 2, torch::RestrictPtrTraits> partial_wa_wl,
     torch::PackedTensorAccessor32<float, 2, torch::RestrictPtrTraits> partial_hpwl,
+    torch::PackedTensorAccessor32<float, 2, torch::RestrictPtrTraits> partial_cross_wl,
+    torch::PackedTensorAccessor32<float, 2, torch::RestrictPtrTraits> partial_one_die_wl,
     torch::PackedTensorAccessor32<float, 2, torch::RestrictPtrTraits> pin_grad,
+    torch::PackedTensorAccessor32<int64_t, 1, torch::RestrictPtrTraits> total_pin,
     int num_nets,
     float inv_gamma) {
     const int index = blockIdx.x * blockDim.x + threadIdx.x;
     const int i = index >> 1;  // net index
-    if (i < num_nets && net_mask[i]) {
+    if (i < num_nets) {
         const int c = index & 1;  // channel index
         int64_t start_idx = 0;
         if (i != 0) {
@@ -281,13 +284,28 @@ __global__ void wa_wirelength_masked_kernel(
             int64_t pin_id = hyperedge_list[start_idx];
             float x_min = pin_pos[pin_id][c];
             float x_max = pin_pos[pin_id][c];
+
+            if (x_max > 20000) printf("%f\n", x_max);
+            if (x_min < -100) printf("%f\n", x_min);
+            int has_via = 0;
+            int pin_num = 1;
             for (int64_t idx = start_idx + 1; idx < end_idx; idx++) {
                 float cur_x = pin_pos[hyperedge_list[idx]][c];
                 x_min = min(cur_x, x_min);
                 x_max = max(cur_x, x_max);
+                if (cur_x > 20000 || cur_x < -100) printf("%f\n", cur_x);
+
+                if (hyperedge_list[idx] >= 98752) {has_via = 1;}
+                pin_num++;
             }
             partial_hpwl[i][c] = round((x_max - x_min));
+            if (has_via == 1) {
+                partial_cross_wl[i][c] = round((x_max - x_min));
+            } else {
+                partial_one_die_wl[i][c] = round((x_max - x_min));
+            }
             // partial_hpwl[i][c] = round(abs(x_max - x_min) * hpwl_scale[c]);
+            total_pin[i] = pin_num;
 
             float sum_x_exp_x = 0;
             float sum_x_exp_nx = 0;
@@ -375,7 +393,7 @@ void calc_node_grad_cuda(torch::Tensor node_grad,
     }
 }
 
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> merged_forward_backward_with_hpwl_cuda(
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> merged_forward_backward_with_hpwl_cuda(
     torch::Tensor node_pos,
     torch::Tensor pin_id2node_id,
     torch::Tensor pin_rel_cpos,
@@ -398,6 +416,10 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> merged_forward_backward_
     auto partial_wa_wl = torch::zeros({num_nets, num_channels}, torch::dtype(pin_pos.dtype()).device(pin_pos.device()));
     auto partial_hpwl = torch::zeros({num_nets, num_channels}, torch::dtype(pin_pos.dtype()).device(pin_pos.device()));
     auto pin_grad = torch::zeros({num_pins, num_channels}, torch::dtype(pin_pos.dtype()).device(pin_pos.device()));
+    auto partial_cross_wl = torch::zeros({num_nets, num_channels}, torch::dtype(pin_pos.dtype()).device(pin_pos.device()));
+    auto partial_one_die_wl = torch::zeros({num_nets, num_channels}, torch::dtype(pin_pos.dtype()).device(pin_pos.device()));
+
+    auto total_pin = torch::zeros({num_nets}, torch::dtype(torch::kInt64).device(pin_pos.device()));
 
     const int threads = 128;
     const int blocks = (num_pins * 2 + threads - 1) / threads;
@@ -419,7 +441,10 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> merged_forward_backward_
         net_mask.packed_accessor32<bool, 1, torch::RestrictPtrTraits>(),
         partial_wa_wl.packed_accessor32<float, 2, torch::RestrictPtrTraits>(),
         partial_hpwl.packed_accessor32<float, 2, torch::RestrictPtrTraits>(),
+        partial_cross_wl.packed_accessor32<float, 2, torch::RestrictPtrTraits>(),
+        partial_one_die_wl.packed_accessor32<float, 2, torch::RestrictPtrTraits>(),
         pin_grad.packed_accessor32<float, 2, torch::RestrictPtrTraits>(),
+        total_pin.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(),
         num_nets,
         inv_gamma);
 
@@ -427,5 +452,5 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> merged_forward_backward_
     calc_node_grad_cuda(
         node_grad, pin_id2node_id, pin_grad, node2pin_list, node2pin_list_end, num_nodes, deterministic);
 
-    return {partial_wa_wl, node_grad, partial_hpwl};
+    return {partial_wa_wl, node_grad, partial_hpwl, partial_cross_wl, partial_one_die_wl};
 }

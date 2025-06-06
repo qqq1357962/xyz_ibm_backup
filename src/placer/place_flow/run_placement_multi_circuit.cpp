@@ -144,8 +144,7 @@ void run_placement_main_multi_circuit() {
                 }
                 else{
                     node_pos = pt.run_gp2d_grid(data);
-                    // pt.run_patoh_grided(data, node_pos);
-                    data.node_die = torch::ones(data.num_nodes, torch::dtype(torch::kInt));
+                    // data.node_die = torch::ones(data.num_nodes, torch::dtype(torch::kInt));
                     // via_data = ViaData(data, rawdb, data.node_die);
                     // auto node_size_2d = data.node_size;
                     // std::filesystem::path current_dir(std::filesystem::current_path());
@@ -163,98 +162,90 @@ void run_placement_main_multi_circuit() {
                 pt.node_pos_2d_ground = node_pos;
                 // data.node_pos = node_pos;
             }
-            if (st::setting.force_coeff_2d == 1) st::setting.use_filler_3d = true;
-            // pt.run_patoh(data);
-            // pt.greedy_macro_partition(data);//@@FREEZE
-            // pt.greedy_partition_by_area(data);
-            // if(st::setting.mode==3)
-            // {
-            //     pt.run_patoh(data);
-            // }else{
-            //     pt.greedy_partition_by_std_area(data);
-            // }
-            // pt.greedy_partition_by_std_area(data);
-            // pt.greedy_partition_by_maximize_cuts(data);
-            data.node_die = pt.node_die.clone();
-            node_die = pt.node_die.clone();
-            // std::tie(sorted_tensor, indices) = tensor.sort();
-            if(st::setting.adjust_macro)
-            {
-                pt.adjust_macros(data);
+            if (st::setting.skip_2d) {
+                if (st::setting.force_coeff_2d == 1) st::setting.use_filler_3d = true;
+
+                data.node_die = pt.node_die.clone();
                 node_die = pt.node_die.clone();
-            }
-            // data.node_die = pt.node_die.clone();
-            if (false) {
-                torch::Tensor node_size_top =
-                    data.node_size_top * pt.node_die.index({Slice(cell_mov_lhs, cell_mov_rhs)}).unsqueeze(1);
-                torch::Tensor node_size_bot =
-                    data.node_size_bot * (1 - pt.node_die).index({Slice(cell_mov_lhs, cell_mov_rhs)}).unsqueeze(1);
-                auto cell_node_pos_lg = data.node_pos.index({Slice(cell_mov_lhs, cell_mov_rhs)});
-                auto info1 = make_tuple(st::setting.round_recursion, 0, data.design_name + "_BEFORE_GP3D_0");
-                draw_fig_with_cairo_cpp(cell_node_pos_lg, node_size_bot, data, info1);
-                auto info2 = make_tuple(st::setting.round_recursion, 0, data.design_name + "_BEFORE_GP3D_1");
-                draw_fig_with_cairo_cpp(cell_node_pos_lg, node_size_top, data, info2);
-                auto info3 = make_tuple(st::setting.round_recursion, 0, data.design_name + "_BEFORE_GP3D_2");
-                auto node_pos_draw_cp = torch::cat({cell_node_pos_lg, cell_node_pos_lg}, 0);
-                auto node_size_draw_cp = torch::cat({node_size_bot, node_size_top}, 0);
-                draw_fig_with_cairo_cpp_cross_chip(node_pos_draw_cp, node_size_draw_cp, data, info3);
-            }
-            data.node_die = pt.node_die.clone();
-            if(st::setting.mode==4)
-            {
-                st::setting.magic_hpwl=350000;
-            }
-            if(st::setting.load_stage=="3D") {
-                data.node_die = torch::ones(data.num_nodes, torch::dtype(torch::kInt));
-                node_pos = load_from_file(st::setting.load_file, data);
-            }
-            else {
-                auto node_die_check = data.node_die.clone();
-                if (st::setting.patoh_guide_ratio > 1e-3) {
-                    pt.run_patoh_area(data);
+                // std::tie(sorted_tensor, indices) = tensor.sort();
+                if(st::setting.adjust_macro)
+                {
+                    pt.adjust_macros(data);
+                    node_die = pt.node_die.clone();
+                }
+                // data.node_die = pt.node_die.clone();
+                if (false) {
+                    torch::Tensor node_size_top =
+                        data.node_size_top * pt.node_die.index({Slice(cell_mov_lhs, cell_mov_rhs)}).unsqueeze(1);
+                    torch::Tensor node_size_bot =
+                        data.node_size_bot * (1 - pt.node_die).index({Slice(cell_mov_lhs, cell_mov_rhs)}).unsqueeze(1);
+                    auto cell_node_pos_lg = data.node_pos.index({Slice(cell_mov_lhs, cell_mov_rhs)});
+                    auto info1 = make_tuple(st::setting.round_recursion, 0, data.design_name + "_BEFORE_GP3D_0");
+                    draw_fig_with_cairo_cpp(cell_node_pos_lg, node_size_bot, data, info1);
+                    auto info2 = make_tuple(st::setting.round_recursion, 0, data.design_name + "_BEFORE_GP3D_1");
+                    draw_fig_with_cairo_cpp(cell_node_pos_lg, node_size_top, data, info2);
+                    auto info3 = make_tuple(st::setting.round_recursion, 0, data.design_name + "_BEFORE_GP3D_2");
+                    auto node_pos_draw_cp = torch::cat({cell_node_pos_lg, cell_node_pos_lg}, 0);
+                    auto node_size_draw_cp = torch::cat({node_size_bot, node_size_top}, 0);
+                    draw_fig_with_cairo_cpp_cross_chip(node_pos_draw_cp, node_size_draw_cp, data, info3);
+                }
+                if(st::setting.mode==4)
+                {
+                    st::setting.magic_hpwl=350000;
+                }
+                if(st::setting.load_stage=="3D") {
+                    data.node_die = torch::ones(data.num_nodes, torch::dtype(torch::kInt));
+                    node_pos = load_from_file(st::setting.load_file, data);
                 }
                 else {
-                    data.node_die = torch::rand({data.cell_mov_rhs - data.cell_mov_lhs}).round().to(torch::kInt);
+                    auto node_die_check = data.node_die.clone();
+                    if (st::setting.patoh_guide_ratio > 1e-3) {
+                        pt.run_patoh_area(data);
+                    }
+                    else {
+                        data.node_die = torch::rand({data.cell_mov_rhs - data.cell_mov_lhs}).round().to(torch::kInt);
+                    }
+                    auto rotate_90 = st::setting.rotate_90 && st::setting.rotate_180;
+                    auto node_orient_back_up = data.node_orient_top.clone();
+                    auto stop_overflow_3d_back_up = st::setting.stop_overflow_3d;
+                    // if (rotate_90) {
+                    //     st::setting.stop_overflow_3d = 0.2;
+                    // }
+                    torch::Tensor macro_indices = torch::nonzero(data.macro_mask).squeeze();
+                    auto [node_rotate, new_node_pos, node_rotate90_tend] = pt.run_gp3d(data, rotate_90);  // second gp in gp3d mode
+                    auto node_angle = (node_rotate + data.node_orient_top) % 4;
+                    data.setMacroOrient(node_angle);
+                    // if (rotate_90) {
+                    //     rotate_90 = false;
+                    //     st::setting.stop_overflow_3d = stop_overflow_3d_back_up;
+                    //     std::tie(node_rotate, new_node_pos, node_rotate90_tend) = pt.run_gp3d(data, rotate_90);
+                    //     node_angle = (node_rotate + data.node_orient_top) % 4;
+                    //     data.setMacroOrient(node_angle);
+                    // }
+                    node_pos = new_node_pos.clone();
+                    auto node_die_check2 = pt.node_die.clone();
+                    auto node_die_diff = node_die_check.slice(0,data.cell_mov_lhs, data.cell_mov_rhs)^node_die_check2.slice(0,data.cell_mov_lhs, data.cell_mov_rhs);
+                    int diff_num = node_die_diff.sum().item<int>();
+                    logger.info("%d nodes changed their die id, total %d, ratio %f", diff_num, data.cell_mov_rhs, float(diff_num)/float(data.cell_mov_rhs));
                 }
-                auto rotate_90 = st::setting.rotate_90 && st::setting.rotate_180;
-                auto node_orient_back_up = data.node_orient_top.clone();
-                auto stop_overflow_3d_back_up = st::setting.stop_overflow_3d;
-                // if (rotate_90) {
-                //     st::setting.stop_overflow_3d = 0.2;
-                // }
-                torch::Tensor macro_indices = torch::nonzero(data.macro_mask).squeeze();
-                auto [node_rotate, new_node_pos, node_rotate90_tend] = pt.run_gp3d(data, rotate_90);  // second gp in gp3d mode
-                auto node_angle = (node_rotate + data.node_orient_top) % 4;
-                data.setMacroOrient(node_angle);
-                // if (rotate_90) {
-                //     rotate_90 = false;
-                //     st::setting.stop_overflow_3d = stop_overflow_3d_back_up;
-                //     std::tie(node_rotate, new_node_pos, node_rotate90_tend) = pt.run_gp3d(data, rotate_90);
-                //     node_angle = (node_rotate + data.node_orient_top) % 4;
-                //     data.setMacroOrient(node_angle);
-                // }
-                node_pos = new_node_pos.clone();
-                auto node_die_check2 = pt.node_die.clone();
-                auto node_die_diff = node_die_check.slice(0,data.cell_mov_lhs, data.cell_mov_rhs)^node_die_check2.slice(0,data.cell_mov_lhs, data.cell_mov_rhs);
-                int diff_num = node_die_diff.sum().item<int>();
-                logger.info("%d nodes changed their die id, total %d, ratio %f", diff_num, data.cell_mov_rhs, float(diff_num)/float(data.cell_mov_rhs));
-            }
-            data.node_pos = node_pos;
+                data.node_pos = node_pos;
 
-            // via_data = ViaData(data, rawdb, data.node_die);
-            // auto node_size555 = data.node_size_bot * (1 - node_die).unsqueeze(1) + data.node_size_top * node_die.unsqueeze(1);
-            // std::filesystem::path current_dir(std::filesystem::current_path());
-            // std::filesystem::path result_dir(st::setting.result_dir);
-            // std::filesystem::path exp_id(st::setting.exp_id);
-            // std::filesystem::path filename("gp3d_output.txt");
-            // std::filesystem::path file_path = (current_dir / result_dir / exp_id / filename);
-            // auto via_pos = torch::ones({data.num_nets,2});
-            // auto via_die = torch::ones({data.num_nets});
-            // via_die *= -1;
-            // via_data.dump(torch::cat({node_pos.slice(1,0,2), via_pos}, 0), node_size555,torch::cat({data.node_die,via_die}), cell_mov_lhs, cell_mov_rhs, data.node_orient_top);
-            // rawdb->writeICCAD2022(file_path);
-            // if (st::setting.force_coeff_2d) {  // false
-            data.node_die = pt.node_die.clone();
+                // via_data = ViaData(data, rawdb, data.node_die);
+                // auto node_size555 = data.node_size_bot * (1 - node_die).unsqueeze(1) + data.node_size_top * node_die.unsqueeze(1);
+                // std::filesystem::path current_dir(std::filesystem::current_path());
+                // std::filesystem::path result_dir(st::setting.result_dir);
+                // std::filesystem::path exp_id(st::setting.exp_id);
+                // std::filesystem::path filename("gp3d_output.txt");
+                // std::filesystem::path file_path = (current_dir / result_dir / exp_id / filename);
+                // auto via_pos = torch::ones({data.num_nets,2});
+                // auto via_die = torch::ones({data.num_nets});
+                // via_die *= -1;
+                // via_data.dump(torch::cat({node_pos.slice(1,0,2), via_pos}, 0), node_size555,torch::cat({data.node_die,via_die}), cell_mov_lhs, cell_mov_rhs, data.node_orient_top);
+                // rawdb->writeICCAD2022(file_path);
+                // if (st::setting.force_coeff_2d) {  // false
+                data.node_die = pt.node_die.clone();
+            }
+            
         } else {
             printlog(LOG_ERROR, "Partitioner %s not found!", st::setting.partitioner.c_str());
             pt.node_die = torch::ones(data.num_nodes, dtype(torch::kInt));
@@ -564,7 +555,9 @@ void run_placement_main_multi_circuit() {
                           via_mov_rhs,
                           mov_lhs,
                           mov_rhs,
-                          false);
+                          false,
+                          true,
+                          true);
     } else if (st::setting.lg_model != "null") {  // TODO: add to argument
         logger.info("Lading model from %s", st::setting.lg_model.c_str());
         torch::load(node_pos, st::setting.lg_model);

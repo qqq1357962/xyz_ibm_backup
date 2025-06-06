@@ -172,6 +172,7 @@ argparse::ArgumentParser get_option(int argc, char* argv[]) {
     parser.add_argument("--rotate_type").default_value(string("direct")).help("Loss Type");
     parser.add_argument("--rotate_thre").default_value(double(0.30)).help("Rotate Threshold").scan<'g', double>();
     parser.add_argument("--rotate_coef").default_value(int(1000)).help("Rotate Threshold").scan<'i', int>();
+    parser.add_argument("--skip_2d").default_value(string("false")).help("skip 2d placer");
 
 
 

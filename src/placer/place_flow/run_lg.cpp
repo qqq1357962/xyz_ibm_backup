@@ -1,7 +1,7 @@
 #include "../run_placement.h"
 
 torch::Tensor run_lg(NodeData& data, ViaData& via_data, torch::Tensor node_pos, states& hpwl_state, int& cell_mov_lhs,
-                     int& cell_mov_rhs, int& via_mov_lhs, int& via_mov_rhs, int& mov_lhs, int& mov_rhs, bool only_macro) {
+                     int& cell_mov_rhs, int& via_mov_lhs, int& via_mov_rhs, int& mov_lhs, int& mov_rhs, bool only_macro, bool only_cells, bool only_vias) {
     vector<double> viaColor = {0.5, 0.3, 0.6, 0.5};  // TODO: via color
     auto node_die = data.node_die.clone();
     auto device = data.device;
@@ -13,7 +13,7 @@ torch::Tensor run_lg(NodeData& data, ViaData& via_data, torch::Tensor node_pos, 
     torch::Tensor via_node_pos_lg = node_pos.index({Slice(cell_mov_rhs, mov_rhs)});
     torch::Tensor via_node_pos_init = via_node_pos_lg.clone();
     torch::Tensor via_node_size_lg = via_data.node_size;
-    if (!only_macro && st::setting.via_dp) {
+    if (!only_macro && st::setting.via_dp && only_vias) {
         torch::Tensor via_node_weight = via_data.bonding_map.to(torch::kCPU);
 
         torch::Tensor node_pos_lg = node_pos;
@@ -73,29 +73,32 @@ torch::Tensor run_lg(NodeData& data, ViaData& via_data, torch::Tensor node_pos, 
     node_size_lg.index({Slice(cell_mov_rhs, None)}) -= data.bondingInfo[2].to(torch::kCPU);  // FIXME: w+space -> w
     dp::DetailedPlaceDataTensor lg_db_at(data, node_pos_lg.to(torch::kCPU), node_size_lg);
     
-    if (st::setting.lg_ver == 2) {
-        logger.info("============= Legalizer-ver.%d =============", st::setting.lg_ver);
-        for (int i = 0; i < 2; i++) {
-            logger.info("============= Chip-%d-Cell LG =============", i);
-            /* update node_weight for each chip */
-            torch::Tensor node_weight =
-                data.mov_node_weights[i].index({Slice(cell_mov_lhs, cell_mov_rhs)}).to(torch::kCPU);
-            torch::Tensor via_node_weight = via_data.bonding_map.clone().to(torch::kCPU) * 0;
-            node_weight = torch::_cast_Int(torch::cat({node_weight, via_node_weight}, 0));
+    if (only_cells) {
+        if (st::setting.lg_ver == 2) {
+            logger.info("============= Legalizer-ver.%d =============", st::setting.lg_ver);
+            for (int i = 0; i < 2; i++) {
+                logger.info("============= Chip-%d-Cell LG =============", i);
+                /* update node_weight for each chip */
+                torch::Tensor node_weight =
+                    data.mov_node_weights[i].index({Slice(cell_mov_lhs, cell_mov_rhs)}).to(torch::kCPU);
+                torch::Tensor via_node_weight = via_data.bonding_map.clone().to(torch::kCPU) * 0;
+                node_weight = torch::_cast_Int(torch::cat({node_weight, via_node_weight}, 0));
 
-            lg_db_at.update_node_weight(node_weight);
-            dp::legalizationV2(data, lg_db_at, node_pos_lg, data.numRows[i].item<int>(),
-                               data.rowHeights[i].item<float>(), 0, 1, 64,cell_mov_lhs, cell_mov_rhs, only_macro);
-            auto [hpwl1, hpwl2, tmp] = evaluate_wl_cross_chip(node_pos_lg.to(data.device), data.node_die.to(data.device), data);
-            logger.info("After Greedy-Abacus LG, solution eval, exact HPWL (bot, top, total): (%.2f, %.2f, %.2f)",
-                        hpwl1.item<float>(),
-                        hpwl2.item<float>(),
-                        (hpwl1 + hpwl2).item<float>());
+                lg_db_at.update_node_weight(node_weight);
+                dp::legalizationV2(data, lg_db_at, node_pos_lg, data.numRows[i].item<int>(),
+                                data.rowHeights[i].item<float>(), 0, 1, 64,cell_mov_lhs, cell_mov_rhs, only_macro);
+                auto [hpwl1, hpwl2, tmp] = evaluate_wl_cross_chip(node_pos_lg.to(data.device), data.node_die.to(data.device), data);
+                logger.info("After Greedy-Abacus LG, solution eval, exact HPWL (bot, top, total): (%.2f, %.2f, %.2f)",
+                            hpwl1.item<float>(),
+                            hpwl2.item<float>(),
+                            (hpwl1 + hpwl2).item<float>());
+            }
+        } else {
+            logger.info("============= Legalizer-ver.%d =============", st::setting.lg_ver);
+            dp::legalizationV1(data, node_pos_lg, node_size_lg, cell_mov_lhs, cell_mov_rhs);
         }
-    } else {
-        logger.info("============= Legalizer-ver.%d =============", st::setting.lg_ver);
-        dp::legalizationV1(data, node_pos_lg, node_size_lg, cell_mov_lhs, cell_mov_rhs);
     }
+    
 
     /* evalutate wirelength */
     auto [hpwl1, hpwl2, hpwl_ovlp] = evaluate_wl_cross_chip(node_pos.to(device), data.node_die.to(device), data);

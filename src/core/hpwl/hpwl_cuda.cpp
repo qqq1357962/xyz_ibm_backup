@@ -12,7 +12,7 @@ torch::Tensor nodePosToPinPos(torch::Tensor node_pos, torch::Tensor pin_id2node_
     return node_pos_to_pin_pos_cuda_forward(node_pos, pin_id2node_id, pin_rel_cpos);
 }
 
-tuple<torch::Tensor, torch::Tensor, torch::Tensor> merged_forward_backward_with_hpwl(torch::Tensor node_pos,
+tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> merged_forward_backward_with_hpwl(torch::Tensor node_pos,
                                                                                      torch::Tensor pin_id2node_id,
                                                                                      torch::Tensor pin_rel_cpos,
                                                                                      torch::Tensor node2pin_list,

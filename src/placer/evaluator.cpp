@@ -160,7 +160,7 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> fast_evaluator_multi_circuit(
     /* 2 circuits: chip_0 | chip_1 */
     torch::Tensor masked_hpwls = torch::zeros({2}, torch::dtype(mov_node_pos.dtype()).device(mov_node_pos.device()));
 
-    if (st::setting.rf_flag == true) {
+    if (true) {
         for (int i = 0; i < 2; i++) {
             torch::Tensor masked_hpwl_chip = wa_wirelength_hpwl::masked_scale_hpwl(conn_node_pos,
                                                                                    data.pin_id2node_id,
@@ -195,12 +195,21 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> fast_evaluator_multi_circuit(
     torch::Tensor overflows = torch::zeros({3}, torch::dtype(mov_node_pos.dtype()).device(mov_node_pos.device()));
     torch::Tensor density_maps = torch::zeros({st::setting.num_den_layer, st::setting.num_bin_x, st::setting.num_bin_y},
                                               torch::dtype(mov_node_pos.dtype()).device(mov_node_pos.device()));
-    for (int i = 0; i < st::setting.num_den_layer; i++) {
+    
+    if (st::setting.skip_2d) {
         auto [overflow_chip, density_map] =
-            density_map_layers[i].direct_calc_overflow(mov_node_pos, mov_node_size, init_density_maps[i]);
-        overflows[i] = overflow_chip;
-        density_maps[i] = density_map;
+            density_map_layers[2].direct_calc_overflow(mov_node_pos, mov_node_size, init_density_maps[2]);
+        overflows[2] = overflow_chip;
+        density_maps[2] = density_map;
+    } else {
+        for (int i = 0; i < st::setting.num_den_layer; i++) {
+            auto [overflow_chip, density_map] =
+                density_map_layers[i].direct_calc_overflow(mov_node_pos, mov_node_size, init_density_maps[i]);
+            overflows[i] = overflow_chip;
+            density_maps[i] = density_map;
+        }
     }
+    
 
     return {masked_hpwls, overflows, density_maps};
 }  // END MODULE

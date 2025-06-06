@@ -7,8 +7,14 @@ void Partitioner::run_patoh(NodeData &data, bool is_move_macro) {
 
     int nNode = nodes.size();
     int *cwghts = new int[nNode];
-    for (int i = 0; i < nNode; i++) cwghts[i] = 1;
-
+    for (int i = 0; i < nNode; i++) {
+        if (is_move_macro) {
+            cwghts[i] = static_cast<int>((nodes[i]->sizes[0] + nodes[i]->sizes[1]) / 2 / data.site_width * data.macro_mask[i].item<int>());
+        } else {
+            cwghts[i] = static_cast<int>((nodes[i]->sizes[0] + nodes[i]->sizes[1]) / 2 / data.site_width * (1 - data.macro_mask[i].item<int>()));
+        }
+        
+    }
     int nNets = nets.size();
     int *nwghts = new int[nNets];
     for (int i = 0; i < nNets; i++) {
@@ -74,16 +80,17 @@ void Partitioner::run_patoh(NodeData &data, bool is_move_macro) {
     targetweights[1] = 1 - ratio;  // TODO:
 
     
-    if(!is_move_macro) {
-        useFixCells = true;
-        for (int i = 0; i < nNode; i++) {
-            if(data.macro_mask[i].item<int>() == 1) {
-                partvec[i] = data.node_die[i].item<int>();
-            } else {
-                partvec[i] = -1;
-            }
-        }
-    }
+    // if(!is_move_macro) {
+    //     useFixCells = true;
+    //     for (int i = 0; i < nNode; i++) {
+    //         if(data.macro_mask[i].item<int>() == 1) {
+    //             partvec[i] = data.node_die[i].item<int>();
+    //             std::cout << i << " " << data.node_die[i].item<int>() << std::endl; 
+    //         } else {
+    //             partvec[i] = -1;
+    //         }
+    //     }
+    // }
 
     PaToH_Part(
         &args, _c, _n, _nconst, useFixCells, cwghts, nwghts, xpins, pins, targetweights, partvec, partweights, &cut);
@@ -97,43 +104,44 @@ void Partitioner::run_patoh(NodeData &data, bool is_move_macro) {
     rpt_cut_size();
     logger.info("Weights < %.2f <-- %.2f >", ratio, (1 - node_die).sum().item<float>() / node_die.size(0));
 
-    if(!is_move_macro) {
+    if(is_move_macro) {
         for (int i = 0; i < nNode; i++) {
             if(data.macro_mask[i].item<int>() == 1) {
                 int group = partvec[i];
                 //mov_cell_areas[group] += nodes[i]->sizes[group];
                 nodes[i]->group = group;
                 node_die[i] = group;
+                std::cout << i << " " << group << std::endl; 
             }
         }
     }
     //for(int stage = 0; stage < 2; stage++) {
 
-    for (int i = 0; i < nNode; i++) {
-        //if(data.macro_mask[i].item<int>() != stage) continue;
-        int group = partvec[i];
-        if(data.macro_mask[i].item<int>() == 1) {
-            std::cout << " ===================\n"; 
-            std::cout << i << " " << group; 
 
+    if (!is_move_macro) {
+        mov_cell_areas = torch::zeros(2, torch::dtype(torch::kLong));
+        auto [sorted_tensor, indices] = (data.node_size).index({torch::indexing::Slice(), 0}).sort(-1, true);
+        for (int n = 0; n < nNode; n++) {
+            int i = indices[n].item<int>();
+
+            int group = partvec[i];
+            if (data.macro_mask[i].item<int>() == 1) {
+                group = nodes[i]->group;
+            }
+            // TODO: force balance
+            if (st::setting.clamp_util) {
+                if ((mov_cell_areas[group] + nodes[i]->sizes[group] > max_mov_cell_areas[group]).item<bool>())
+                    group = !group;
+            }
+            mov_cell_areas[group] += nodes[i]->sizes[group];
+            nodes[i]->group = group;
+            node_die[i] = group;
+            if(data.macro_mask[i].item<int>() == 1) {
+                std::cout << i << " " << group << std::endl; 
+            }
         }
     }
-
-    mov_cell_areas = torch::zeros(2, torch::dtype(torch::kLong));
-    auto [sorted_tensor, indices] = (data.node_size).index({torch::indexing::Slice(), 0}).sort();
-    for (int n = 0; n < nNode; n++) {
-        int i = indices[n].item<int>();
-
-        int group = partvec[i];
-        // TODO: force balance
-        if (st::setting.clamp_util) {
-            if ((mov_cell_areas[group] + nodes[i]->sizes[group] > max_mov_cell_areas[group]).item<bool>())
-                group = !group;
-        }
-        mov_cell_areas[group] += nodes[i]->sizes[group];
-        nodes[i]->group = group;
-        node_die[i] = group;
-    }
+    
 
     data.node_die = node_die.clone();  // TODO: construct data from pt
     data.mov_cell_areas = mov_cell_areas.clone();
@@ -161,7 +169,7 @@ void Partitioner::run_patoh_area(NodeData &data) {
 
     int nNode = nodes.size();
     int *cwghts = new int[nNode];
-    for (int i = 0; i < nNode; i++) cwghts[i] = nodes[i]->sizes[0] + nodes[i]->sizes[1];
+    for (int i = 0; i < nNode; i++) cwghts[i] = static_cast<int>((nodes[i]->sizes[0] + nodes[i]->sizes[1]) / 2 / data.site_width);
 
     int nNets = nets.size();
     int *nwghts = new int[nNets];

@@ -43,7 +43,7 @@ torch::Tensor run_gp_refine(NodeData& data, ViaData& via_data, torch::Tensor nod
                             int& mov_rhs);
 
 torch::Tensor run_lg(NodeData& data, ViaData& via_data, torch::Tensor node_pos, states& hpwl_state, int& cell_mov_lhs,
-                     int& cell_mov_rhs, int& via_mov_lhs, int& via_mov_rhs, int& mov_lhs, int& mov_rhs, bool only_macro);
+                     int& cell_mov_rhs, int& via_mov_lhs, int& via_mov_rhs, int& mov_lhs, int& mov_rhs, bool only_macro, bool only_cells=true, bool only_vias=true);
 
 torch::Tensor run_floorplan(NodeData& data, torch::Tensor node_pos, states& hpwl_state, int& cell_mov_lhs,
                      int& cell_mov_rhs);

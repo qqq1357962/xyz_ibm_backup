@@ -330,23 +330,23 @@ tuple<at::Tensor, at::Tensor, at::Tensor> NodeData::get_mov_node_info_cross_chip
 
     /* update mov_node info */
     auto mov_node_size_all = torch::cat(
-        {mov_node_size.index({Slice({mov_lhs, mov_rhs})}), via_mov_node_size.index({Slice({via_mov_lhs, via_mov_rhs})}),
+        {mov_node_size.index({Slice({0, mov_rhs})}), via_mov_node_size.index({Slice({via_mov_lhs, via_mov_rhs})}),
          mov_node_size.index({Slice({mov_rhs, torch::indexing::None})}),
          via_mov_node_size.index({Slice({via_mov_rhs, torch::indexing::None})})},
         0);
     auto mov_node_pos_all = torch::cat(
-        {mov_node_pos.index({Slice({mov_lhs, mov_rhs})}), via_mov_node_pos.index({Slice({via_mov_lhs, via_mov_rhs})}),
+        {mov_node_pos.index({Slice({0, mov_rhs})}), via_mov_node_pos.index({Slice({via_mov_lhs, via_mov_rhs})}),
          mov_node_pos.index({Slice({mov_rhs, torch::indexing::None})}),
          via_mov_node_pos.index({Slice({via_mov_rhs, torch::indexing::None})})},
         0);  // FIXME: which order
     auto expand_ratio_all = torch::cat(
-        {expand_ratio.index({Slice({mov_lhs, mov_rhs})}), via_expand_ratio.index({Slice({via_mov_lhs, via_mov_rhs})}),
+        {expand_ratio.index({Slice({0, mov_rhs})}), via_expand_ratio.index({Slice({via_mov_lhs, via_mov_rhs})}),
          expand_ratio.index({Slice({mov_rhs, torch::indexing::None})}),
          via_expand_ratio.index({Slice({via_mov_rhs, torch::indexing::None})})},
         0);
 
     mov_node_to_num_pins =
-        torch::cat({mov_node_to_num_pins.index({Slice({mov_lhs, mov_rhs})}),
+        torch::cat({mov_node_to_num_pins.index({Slice({0, mov_rhs})}),
                     via_data.mov_node_to_num_pins.index({Slice({via_mov_lhs, via_mov_rhs})}),
                     mov_node_to_num_pins.index({Slice({mov_rhs, torch::indexing::None})}),
                     via_data.mov_node_to_num_pins.index({Slice({via_mov_rhs, torch::indexing::None})})},
@@ -354,7 +354,7 @@ tuple<at::Tensor, at::Tensor, at::Tensor> NodeData::get_mov_node_info_cross_chip
 
     /* update node_die: -1 | 0 | 1 | 2 */
     node_die = torch::cat(
-        {node_die.index({Slice({mov_lhs, mov_rhs})}), via_data.node_die.index({Slice({via_mov_lhs, via_mov_rhs})})}, 0);
+        {node_die.index({Slice({0, mov_rhs})}), via_data.node_die.index({Slice({via_mov_lhs, via_mov_rhs})})}, 0);
 
     /* mov_node_weights */
     auto mov_node_weights_tmp = mov_node_weights.clone();
@@ -385,7 +385,7 @@ tuple<at::Tensor, at::Tensor, at::Tensor> NodeData::get_mov_node_info_cross_chip
     pin_id2node_id = torch::cat({pin_id2node_id, via_id2node_id}, 0);
     torch::Tensor via_id2net_id = torch::arange(0, num_nets, torch::dtype(torch::kInt64));
     pin_id2net_id = torch::cat({pin_id2net_id, via_id2net_id}, 0);
-    
+
     torch::Tensor via_additional_pin_list = torch::arange(num_pins, num_pins + num_nets, torch::dtype(torch::kInt64));
     node2pin_list = torch::cat({node2pin_list, via_additional_pin_list }, 0);
     torch::Tensor via_additional_pin_list_end = torch::arange(num_pins + 1, num_pins + num_nets + 1, torch::dtype(torch::kInt64));
@@ -476,12 +476,12 @@ tuple<at::Tensor, at::Tensor, at::Tensor> NodeData::get_mov_node_info_cross_chip
         hyperedge_list[ptr] = num_pins + i;
         ptr++;
         last_idx += end_idx - start_idx + 1;
-        hyperedge_list_end[i] = last_idx;
+        hyperedge_list_end[i] = ptr;
     }
 
     /* update node area info | sorted maps */
     mov_cell_areas = torch::cat({mov_cell_areas, torch::sum(via_data.mov_cell_area, 0).unsqueeze(0)}, 0);
-    movable_index = make_tuple(mov_lhs, mov_rhs + via_mov_rhs);
+    movable_index = make_tuple(mov_lhs, mov_rhs + via_mov_rhs - via_mov_lhs);
     tie(mov_lhs, mov_rhs) = movable_index;
     /* compute_sorted_node_map */
     // TODO: for parameter_scheduler

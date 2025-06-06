@@ -52,4 +52,5 @@ tuple<torch::Tensor, torch::Tensor> calc_obj_and_grad_multi_circuit(
     vector<ElectronicDensityLayer>& density_map_layers,
     torch::Tensor conn_fix_node_pos,
     ParamScheduler& ps,
-    NodeData& data);
+    NodeData& data,
+    PlaceData& via_data);

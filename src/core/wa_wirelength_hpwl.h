@@ -20,6 +20,8 @@ public:
                                  at::Tensor node_die = torch::empty({0})) {
         // Save data for backward in context
         torch::Tensor partial_wa_wl, node_grad, partial_hpwl;
+        auto partial_cross_wl = torch::zeros_like(node_pos);
+        auto partial_one_die_wl = torch::zeros_like(node_pos);
         if (node_die.numel()) {
             // if (false) {
             std::tie(partial_wa_wl, node_grad, partial_hpwl) =
@@ -33,8 +35,20 @@ public:
                                                                                  gamma,
                                                                                  true);
         } else {
-            std::tie(partial_wa_wl, node_grad, partial_hpwl) = wa_wirelength_hpwl::merged_forward_backward_with_hpwl(
-                node_pos, pin_id2node_id, pin_rel_cpos, node2pin_list, node2pin_list_end, hyperedge_list, hyperedge_list_end, net_mask, gamma, true);
+            std::tie(partial_wa_wl, node_grad, partial_hpwl, partial_cross_wl, partial_one_die_wl) =
+                wa_wirelength_hpwl::merged_forward_backward_with_hpwl(node_pos,
+                                                                      pin_id2node_id,
+                                                                      pin_rel_cpos,
+                                                                      node2pin_list,
+                                                                      node2pin_list_end,
+                                                                      hyperedge_list,
+                                                                      hyperedge_list_end,
+                                                                      net_mask,
+                                                                      gamma,
+                                                                      true);
+
+            // std::cout << "cross_wl" << torch::sum(partial_cross_wl).item<int>() << std::endl;
+            // std::cout << "one_die_wl" << torch::sum(partial_one_die_wl).item<int>() << std::endl;
         }
 
         at::Tensor sum_hpwl = torch::round(partial_hpwl * hpwl_scale).sum();

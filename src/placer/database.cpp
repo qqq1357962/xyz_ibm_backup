@@ -194,6 +194,8 @@ NodeData::NodeData(Dict& design_info, torch::Device device_) {
     actualUtilM[0] = estimated_target_density_bot;
     actualUtilM[1] = estimated_target_density_top;
     maxUtilM = actualUtilM * (1 + st::setting.die_diff);
+    // st::setting.die_diff = ((1 - actualUtilM[0].item<double>()) - (1 - maxUtilM[0].item<double>()) + (1 - actualUtilM[1].item<double>()) - (1 - maxUtilM[1].item<double>())) / (2 - actualUtilM[0].item<double>() - actualUtilM[1].item<double>());
+    // logger.info("Filler diff: %.3f", st::setting.die_diff);
 
     upper_lower_bound_ratio = maxUtilM.clone();
     auto area_upper = (node_ratio * maxUtilM[0]) / (mov_node_areas[0] / die_area - maxUtilM[0]);
