@@ -57,6 +57,10 @@ bool draw_fig_with_cairo_cpp(torch::Tensor node_pos,
     int width = base_size * st::setting.draw_mat_size;
     int height = round(width * (hy - ly) / (hx - lx));
 
+    auto node_num = node_pos.size(0);
+    int iopin_mov_lhs = (node_num == data.num_nets) ? 0 : data.iopin_mov_lhs;
+    int iopin_mov_rhs = (node_num == data.num_nets) ? 0 : data.iopin_mov_rhs;
+
     std::vector<std::string> draw_contents = {"Nodes", "NodesText"};
     // std::rotate(node_type_indices.begin(), node_type_indices.begin() + 1, node_type_indices.end());
     return DrawGlobalPlacement(node_pos_x,
@@ -73,8 +77,8 @@ bool draw_fig_with_cairo_cpp(torch::Tensor node_pos,
                                width,
                                height,
                                draw_contents,
-                               data.iopin_mov_lhs,
-                               data.iopin_mov_rhs);
+                               iopin_mov_lhs,
+                               iopin_mov_rhs);
 }
 
 bool draw_fig_with_cairo_cpp2(torch::Tensor node_pos,

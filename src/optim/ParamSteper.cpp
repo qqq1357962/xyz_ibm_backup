@@ -134,15 +134,13 @@ void ParamScheduler::step_density_weights() {
 }
 
 void ParamScheduler::step_wa_coeffs() {
-    if (iter < 1) return;
     if (enable_skip_update && skip_update) return;
     // for (int i = 0; i < 2; i++) {
     //     double coef = std::pow(10, (cur_overflows[i].item<double>() - 0.1) * 20 / 9 - 1);
     //     wa_coeffs[i] = coef * base_gamma;
     // }
     // wa_coeff = (wa_coeffs[0] + wa_coeffs[1]) / 2;
-    double coef = std::pow(10, (cur_overflows.index({Slice(0, 2)}).mean()
-                                .item<double>() - 0.1) * 20 / 9 - 1);
+    double coef = std::pow(10, (cur_overflows[2].item<double>() - 0.1) * 20 / 9 - 1);
     wa_coeff = coef * base_gamma;
     wa_coeffs[0] = coef * base_gamma;
     wa_coeffs[1] = coef * base_gamma;

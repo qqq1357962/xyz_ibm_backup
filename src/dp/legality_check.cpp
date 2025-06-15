@@ -48,7 +48,6 @@ bool siteAlignmentCheck(const DetailedPlaceData& db, float scale_factor, int num
                 i,
                 node_xl,
                 node_yl,
-                row_id_f,
                 row_id,
                 row_yl,
                 row_yh,

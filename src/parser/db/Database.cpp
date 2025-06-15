@@ -982,6 +982,7 @@ CellType* Database::addCellType(const string& name, unsigned libcell) {
         return celltype;
     }
     celltype = new CellType(name, libcell);
+    celltype->celltype_id = celltypes.size();
     name_celltypes.emplace(name, celltype);
     celltypes.push_back(celltype);
     return celltype;

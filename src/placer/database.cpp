@@ -105,6 +105,7 @@ NodeData::NodeData(Dict& design_info, torch::Device device_) {
 
     /* site info */
     std::tie(site_width, site_height) = get<tuple<int, int>>(design_info["site_info"]);
+    site_width_current = site_width;
     __ori_die_lx__ = die_info[0].item<int>();
     __ori_die_hx__ = die_info[1].item<int>();
     __ori_die_ly__ = die_info[2].item<int>();
@@ -330,7 +331,6 @@ NodeData::NodeData(Dict& design_info, torch::Device device_) {
         // pin_rel_cpos = pin_rel_cpos_top.clone();
         // pin_size = pin_size_top.clone();
     }
-    if (st::setting.site_width > 0) site_width = st::setting.site_width;
 
 
     aspect_ratio = (node_size.index({Slice(mov_lhs, mov_rhs), 0}) / node_size.index({Slice(mov_lhs, mov_rhs), 1}));
@@ -705,6 +705,7 @@ void NodeData::prescale_by_site_width() {
     node_size /= site_width;
     pin_rel_cpos /= site_width;
     pin_size /= site_width;
+    site_width_current = 1;
 
     if (bondingInfo.numel()) bondingInfo /= site_width;
     if (node_size_bot.numel()) node_size_bot /= site_width;
@@ -722,6 +723,7 @@ void NodeData::prescale_by_site_width() {
 void NodeData::postscale_by_site_width() {
     // inplace scaling
     logger.info("design scaled by %d", site_width);
+    site_width_current = site_width;
     die_info *= site_width;
     die_info_back_up *= site_width;
     core_info *= site_width;
@@ -731,6 +733,10 @@ void NodeData::postscale_by_site_width() {
     node_size *= site_width;
     pin_rel_cpos *= site_width;
     pin_size *= site_width;
+    die_ur *= site_width;
+    die_ll *= site_width;
+    core_ur *= site_width;
+    core_ll *= site_width;
 
     if (bondingInfo.numel()) bondingInfo *= site_width;
     if (node_size_bot.numel()) node_size_bot *= site_width;

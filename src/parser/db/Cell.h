@@ -36,6 +36,7 @@ public:
     int edgetypeL = 0;
     int edgetypeR = 0;
     int usedCount = 0;
+    int celltype_id = 0;
 
     CellType(const string& name, int libcell) : _libcell(libcell), name(name) {}
     ~CellType();

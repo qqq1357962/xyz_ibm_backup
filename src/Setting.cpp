@@ -211,6 +211,7 @@ void Setting::parse(argparse::ArgumentParser args) {
     draw_mat_size = args.get<double>("--draw_mat_size");
     omni_int = args.get<int>("--omni_int");
     omni_float = args.get<double>("--omni_float");
+    transfer_txt = str2bool(args.get<std::string>("--transfer_txt"));
 
     log_verbose = str2bool(args.get<std::string>("--log_verbose"));
     if (!log_verbose) {

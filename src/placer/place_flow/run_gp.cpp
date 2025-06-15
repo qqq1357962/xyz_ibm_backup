@@ -74,7 +74,6 @@ torch::Tensor run_gp(NodeData& data,
     st::setting.early_stop_check_plateau = false;
     // st::setting.magic_hpwl *= 2;
     st::setting.density_weight_coef -= 0.01;
-    // st::setting.wa_coeff += 1;
     st::setting.wa_coeff /= 2;
     st::setting.target_density = 1;
     // st::setting.stop_overflow = 0.3;
@@ -424,8 +423,8 @@ torch::Tensor run_gp(NodeData& data,
         int choose = -1;
         int min_occupied = 2000000;
         int min_occupied_pin_id = -1;
-        float lx0=-2000000, ly0=-2000000, rx0=20000000, ry0=20000000;
-        float lx1=-2000000, ly1=-2000000, rx1=20000000, ry1=20000000;
+        float lx0 = -2000000, ly0 = -2000000, rx0 = 20000000, ry0 = 20000000;
+        float lx1 = -2000000, ly1 = -2000000, rx1 = 20000000, ry1 = 20000000;
         for (int ii = start_idx; ii < end_idx; ii++) {
             int pin_id = data.hyperedge_list[ii].item<int>();
             // if (ocupied[pin_id] == 0) {
@@ -439,8 +438,7 @@ torch::Tensor run_gp(NodeData& data,
             //     }
             // }
             int node_id = data.pin_id2node_id[pin_id].item<int>();
-            if(node_id >= data.cell_mov_rhs)
-            {
+            if (node_id >= data.cell_mov_rhs) {
                 continue;
             }
             float node_pos_x = node_pos[node_id][0].item<float>();
@@ -450,35 +448,33 @@ torch::Tensor run_gp(NodeData& data,
             float pin_x = node_pos_x + pin_rel_cpos_x;
             float pin_y = node_pos_y + pin_rel_cpos_y;
             int die_id = node_die[node_id].item<int>();
-            if(die_id==0)
-            {
+            if (die_id == 0) {
                 lx0 = max(lx0, pin_x);
                 ly0 = max(ly0, pin_y);
                 rx0 = min(rx0, pin_x);
                 ry0 = min(ry0, pin_y);
-            }else{
+            } else {
                 lx1 = max(lx1, pin_x);
                 ly1 = max(ly1, pin_y);
                 rx1 = min(rx1, pin_x);
                 ry1 = min(ry1, pin_y);
             }
         }
-        float llx = min(rx0, rx1);
-        float rrx = max(lx0, lx1);
-        float lly = min(ry0, ry1);
-        float rry = max(ly0, ly1);
+        float llx = max(rx0, rx1);
+        float rrx = min(lx0, lx1);
+        float lly = max(ry0, ry1);
+        float rry = min(ly0, ly1);
 
-        float region_lx = min(llx,rrx);
-        float region_rx = max(llx,rrx);
-        float region_ly = min(lly,rry);
-        float region_ry = max(lly,rry);
-        if(abs(llx)>100000||abs(rrx)>100000||abs(lly)>100000||abs(rry)>100000)
-        {
-            int debuggg=0;
+        float region_lx = min(llx, rrx);
+        float region_rx = max(llx, rrx);
+        float region_ly = min(lly, rry);
+        float region_ry = max(lly, rry);
+        if (abs(llx) > 100000 || abs(rrx) > 100000 || abs(lly) > 100000 || abs(rry) > 100000) {
+            int debuggg = 0;
         }
 
-        float region_center_x = (region_lx + region_rx)/2;
-        float region_center_y = (region_ly + region_ry)/2;
+        float region_center_x = (region_lx + region_rx) / 2;
+        float region_center_y = (region_ly + region_ry) / 2;
 
         total_region_x += region_rx - region_lx;
         total_region_y += region_ry - region_ly;
@@ -498,21 +494,32 @@ torch::Tensor run_gp(NodeData& data,
         torch::NoGradGuard no_grad;
         // mov_node_pos_all[data.cell_mov_rhs+i][0] = pin_x;
         // mov_node_pos_all[data.cell_mov_rhs+i][1] = pin_y;
-        mov_node_pos_all[data.cell_mov_rhs+i][0] = region_center_x;
-        mov_node_pos_all[data.cell_mov_rhs+i][1] = region_center_y;
+        mov_node_pos_all[data.cell_mov_rhs + i][0] = region_center_x;
+        mov_node_pos_all[data.cell_mov_rhs + i][1] = region_center_y;
     }
-    total_region_x/=data.num_nets;
-    total_region_y/=data.num_nets;
+    total_region_x /= data.num_nets;
+    total_region_y /= data.num_nets;
     logger.info("cnt_violate: %d", cnt_violate);
     logger.info("average region width: %f, average region height: %f", total_region_x, total_region_y);
     ////////////////////////////////////////////////////////////////////////////////
     logger.info("=========================================");
     logger.info("start gp");
     iteration = 0;  // FIXME: 0 ? 1
-    // for(auto macro_id:macro_list)
-    // {
-    //     mov_node_size_all[macro_id]=0;
-    // }
+    if (true) {
+        auto [hpwls, overflows, tmp1] = evaluator_fn(mov_node_pos_all);
+        logger.info(
+            "Optimal Place | masked_hpwl: %.2E overflow: (%.4f, %.4f, %.4f) "
+            "density_weight: %.4E wa_coeff: %.4E",
+            hpwls.sum().item<float>(),
+            overflows[0].item<float>(),
+            overflows[1].item<float>(),
+            overflows[2].item<float>(),
+            ps.density_weight,
+            ps.wa_coeff);
+
+        ps.cur_overflows = overflows;
+        ps.step_wa_coeffs();
+    }
     int iter_time = st::setting.inner_iter;
     // auto [hpwl_now, overflows_now, tmp_now] = evaluator_fn(mov_node_pos_all);
     // if (overflows_now[2].item<float>() < st::setting.stop_overflow_via) {

@@ -19,6 +19,7 @@ ViaData::ViaData(NodeData& data_, shared_ptr<db::Database> rawdb_, torch::Tensor
     unit_len = data.unit_len;
     __die_scale__ = data.__die_scale__;
     site_width = data.site_width;
+    site_width_current = data.site_width_current;
     site_height = data.site_height;
     num_bin_x = data.num_bin_x;
     num_bin_y = data.num_bin_y;
@@ -178,6 +179,7 @@ ViaData::ViaData(NodeData& data_, shared_ptr<db::Database> rawdb_, torch::Tensor
 
 void ViaData::postscale() {
     logger.info("design scaled by %d", site_width);
+    site_width_current = site_width;
     die_info *= site_width;
     core_info *= site_width;
     row_height *= site_width;

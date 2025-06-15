@@ -15,6 +15,7 @@ public:
     int boundLY = INT_MAX;
     int boundHX = INT_MIN;
     int boundHY = INT_MIN;
+    int pintype_id = 0;
 
     PinType(const string& name, const char direction, const char type)
         : _name(name), _direction(direction), _type(type) {}

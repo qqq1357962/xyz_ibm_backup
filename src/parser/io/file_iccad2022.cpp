@@ -317,6 +317,118 @@ bool Database::readICCAD2022(const std::string& file) {
     return true;
 }
 
+bool Database::writeDEF2ICCAD2022(const std::string& file) {
+    printlog(LOG_INFO, "start transfer contest format to %s", file.c_str());
+    std::ofstream fs(file.c_str());
+    if (!fs.good()) {
+        printlog(LOG_ERROR, "cannot open file: %s", file.c_str());
+        return false;
+    }
+
+    // start parser
+    string line;
+    string buf;
+    string dummy1, dummy2;
+    string techName;
+    string botTechName, topTechName;
+    int numMCs;
+    int tmpUtils;
+    bool onlyOneTech = false;
+    std::unordered_map<std::string, vector<CellType*>> techname2celltypes;
+
+    // 1) NumTechnologies
+    fs << "NumTechnologies " << 2 << std::endl;
+    numMCs = celltypes.size();
+    fs << "Tech TA " << numMCs << std::endl;
+    for (int i = 0; i < numMCs; i++) {
+        CellType* cell = celltypes[i];
+        string Macro_std = "N";
+        if (cell->height > siteH) {
+            Macro_std = "Y";
+        }
+        fs << "LibCell " << Macro_std << " MC" << cell->celltype_id + 1 << " " << float(cell->width) / float(siteW) << " " << float(cell->height) / float(siteW) << " " << cell->pins.size() << std::endl;
+        int pin_num = cell->pins.size();
+        for (int j = 0; j < pin_num; j++) {
+            PinType* pin = cell->pins[j];
+            fs << "Pin P" << j + 1 << " " << float((pin->boundLX + float(pin->boundHX - pin->boundLX) / 2) / siteW) << " " << float((pin->boundLY + float(pin->boundHY - pin->boundLY) / 2) / siteW) << std::endl;
+        }
+    }
+    fs << "Tech TB " << numMCs << std::endl;
+    for (int i = 0; i < numMCs; i++) {
+        CellType* cell = celltypes[i];
+        string Macro_std = "N";
+        if (cell->height > siteH) {
+            Macro_std = "Y";
+        }
+        fs << "LibCell " << Macro_std << " MC" << cell->celltype_id + 1 << " " << float(cell->width) / float(siteW) << " " << float(cell->height) / float(siteW) << " " << cell->pins.size() << std::endl;
+        int pin_num = cell->pins.size();
+        for (int j = 0; j < pin_num; j++) {
+            PinType* pin = cell->pins[j];
+            fs << "Pin P" << j + 1 << " " << float((pin->boundLX + float(pin->boundHX - pin->boundLX) / 2) / siteW) << " " << float((pin->boundLY + float(pin->boundHY - pin->boundLY) / 2) / siteW) << std::endl;
+        }
+    }
+    fs << std::endl;
+    fs << "DieSize " << float(dieLX) / float(siteW) << " " << float(dieLY) / float(siteW) << " " << float(dieHX) / float(siteW) << " " << float(dieHY) / float(siteW) << std::endl;
+    fs << std::endl;
+    fs << "TopDieMaxUtil " << static_cast<int>(top_Max_util * 100) << std::endl;
+    fs << "BottomDieMaxUtil " << static_cast<int>(bot_Max_util * 100) << std::endl;
+    fs << std::endl;
+    int num_rows = rows.size();
+    Row* row = rows[0];
+    fs << "TopDieRows " << 0 << " " << 0 << " " << float(row->xNum() * row->xStep()) / float(siteW) << " " << float(siteH) / float(siteW) << " " << num_rows << std::endl;
+    fs << "BottomDieRows " << 0 << " " << 0 << " " << float(row->xNum() * row->xStep()) / float(siteW) << " " << float(siteH) / float(siteW) << " " << num_rows << std::endl;
+    fs << std::endl;
+    fs << "TopDieTech TA " << std::endl;
+    fs << "BottomDieTech TB " << std::endl;
+    fs << std::endl;
+    fs << "TerminalSize " << float(siteW * 4) / float(siteW) << " " << float(siteH) / float(siteW) << std::endl;
+    fs << "TerminalSpacing " << 0 << std::endl;
+    fs << "TerminalCost " << 0 << std::endl;
+    fs << std::endl;
+
+    int cell_num = cells.size();
+    fs << "NumInstances " << cell_num << std::endl;
+    for (int i = 0; i < cell_num; i++) {
+        Cell* cell = cells[i];
+        fs << "Inst C" << cell->id + 1 << " MC" << cell->ctype()->celltype_id + 1 << std::endl;
+    }
+    fs << std::endl;
+    int net_num = 0;
+    for (int i = 0; i < nets.size(); i++) {
+        Net* net = nets[i];
+        int pin_num = 0;
+        for (int j = 0; j < net->pins.size(); j++) {
+            Pin* pin = net->pins[j];
+            if (pin->cell != nullptr) {
+                pin_num++;
+            }
+        }
+        if (pin_num >= 2) net_num++;
+    }
+    fs << "NumNets " << net_num << std::endl;
+    net_num = 0;
+    for (int i = 0; i < nets.size(); i++) {
+        Net* net = nets[i];
+        int pin_num = 0;
+        for (int j = 0; j < net->pins.size(); j++) {
+            Pin* pin = net->pins[j];
+            if (pin->cell != nullptr) {
+                pin_num++;
+            }
+        }
+        if (pin_num < 2) continue;
+        fs << "Net N" << net_num + 1 << " " << pin_num << std::endl;
+        for (int j = 0; j < net->pins.size(); j++) {
+            Pin* pin = net->pins[j];
+            if (pin->cell != nullptr) {
+                fs << "Pin C" << pin->cell->id + 1 << "/P" << pin->pin_id_in_parent + 1 << std::endl;
+            }
+        }
+        net_num++;
+    }
+    return true;
+}
+
 bool Database::writeICCAD2022(const string& file) {
     printlog(LOG_INFO, "start writing output...");
     std::ofstream fs(file.c_str());
@@ -409,7 +521,7 @@ bool Database::writeOpenroad_vias(const string& file) {
     }
     // write files
     fs << "NumTerminals " << validBondingIds.size() << std::endl;
-    fs << "Terminal size " << static_cast<float>(bondingSizeX) / 2000 << " " << static_cast<float>(bondingSizeY) / 2000 << std::endl;
+    fs << "Terminal size " << static_cast<float>(bondingSizeX) / 10 << " " << static_cast<float>(bondingSizeY) / 10 << std::endl;
     for (int bondingId : validBondingIds) {
         auto& bonding = bondings[bondingId];
         int netId = bonding.netId();

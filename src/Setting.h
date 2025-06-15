@@ -180,6 +180,7 @@ public:
     bool log_verbose;
 
     int min_stop_iter = 100;
+    bool transfer_txt = false;
 
 public:
     // history

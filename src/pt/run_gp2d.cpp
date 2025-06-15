@@ -142,7 +142,7 @@ torch::Tensor Partitioner::run_gp2d_grid(NodeData &data) {
         logger.info("start gp");
         int &iteration = st::setting.iteration;
         iteration = 0;  // FIXME: 0 ? 1
-        for (iteration = 0; iteration < st::setting.inner_iter; iteration++) {
+        for (iteration = 0; iteration < 0; iteration++) {
             torch::Tensor obj = optimizer.step();
             // auto new_orient = data.node_orient_top.clone().contiguous();
             if(st::setting.enable_rotate_in_gp)
@@ -289,8 +289,9 @@ torch::Tensor Partitioner::run_gp2d_grid(NodeData &data) {
     // data.reset();  // FIXME:
     // run_patoh_sub_grid(data, node_pos.to(torch::kCPU));
     // run_patoh_grided(data, node_pos.to(torch::kCPU));
-    run_patoh(data, true);
-    run_patoh(data, false);
+    // run_patoh(data, true);
+    // run_patoh(data, false);
+    run_patoh_area(data);
     // if (st::setting.partitioner == "gp3d" || st::setting.partitioner == "fm_wl") return node_pos.to(torch::kCPU);
 
     // if (st::setting.partitioner == "fm") {

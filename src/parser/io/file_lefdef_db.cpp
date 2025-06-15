@@ -73,7 +73,7 @@ string getOrient(int orient) {
         case 7:
             return "FE";
         case -1:
-            return "NONE";
+            return "N";
         default:
             return "N";
     }
@@ -683,6 +683,64 @@ bool Database::write_Openroad(const string& inputDef, const string& outputDef, c
     }
     return true;
 }
+
+bool Database::write_openroad_partition(const string& inputDef, const string& outputDef, const std::vector<int> node_selected) {
+    ifstream ifs(inputDef.c_str());
+    if (!ifs.good()) {
+        logger.error("Unable to create/open DEF: %s", inputDef.c_str());
+        return false;
+    }
+
+#ifndef NDEBUG
+    logger.info("reading %s", inputDef.c_str());
+#endif
+
+    ofstream ofs(outputDef.c_str());
+    if (!ofs.good()) {
+        logger.error("Unable to create/open DEF: %s", outputDef.c_str());
+        return false;
+    }
+    logger.info("writing %s", outputDef.c_str());
+    int new_dieHX = static_cast<int>(std::ceil(dieHX / sqrt(2) * 1.1));
+    int new_dieHY = static_cast<int>(std::ceil(dieHY / sqrt(2) * 1.1));
+
+    string line;
+    bool load_pin = false;
+    while (getline(ifs, line)) {
+        istringstream iss(line);
+        string s;
+        if (!(iss >> s)) {
+            if (load_pin) {
+                ofs << line << "+ PORT" << endl;
+            } else {
+                ofs << line << endl;
+            }
+            continue;
+        } else if (s != "COMPONENTS" && s != "NETS" && s != "PINS") {
+            if (s == "PINS") load_pin = true;
+            if (s == "END") load_pin = false;
+            ofs << line << endl;
+            continue;
+        } 
+        if (s == "COMPONENTS") {
+            writeComponents(ofs, node_selected);
+        } else if (s == "NETS") {
+            writeNets(ofs, node_selected);
+        } else if (s == "PINS") {
+            writePins(ofs, node_selected);
+        }
+
+        while (getline(ifs, line)) {
+            istringstream iss(line);
+            if (iss >> s && s == "END") {
+                break;
+            }
+        }
+        // process pair (a,b)
+    }
+    return true;
+}
+
 
 bool Database::writeDEF(const string& file) {
     ofstream ofs(file.c_str());

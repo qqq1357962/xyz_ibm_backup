@@ -106,6 +106,7 @@ CellType::~CellType() {
 
 PinType* CellType::addPin(const string& name, const char direction, const char type) {
     PinType* newpintype = new PinType(name, direction, type);
+    newpintype->pintype_id = pins.size();
     pins.push_back(newpintype);
     return newpintype;
 }

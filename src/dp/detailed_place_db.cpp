@@ -85,7 +85,7 @@ DetailedPlaceData::DetailedPlaceData(NodeData& data,
 
     row_width = (data.die_info[1] - data.die_info[0]).item<float>();
     row_size_x = (data.die_info[1] - data.die_info[0]).item<float>();
-    site_width = data.site_width;
+    site_width = data.site_width_current;
     // site_width = 1;                                 // FIXME: pre_scale by site_width
     site_width_safe_divide = int(1);  // TODO:
     row_shift = data.die_info[2].item<float>();

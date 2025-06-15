@@ -285,27 +285,13 @@ __global__ void wa_wirelength_masked_kernel(
             float x_min = pin_pos[pin_id][c];
             float x_max = pin_pos[pin_id][c];
 
-            if (x_max > 20000) printf("%f\n", x_max);
-            if (x_min < -100) printf("%f\n", x_min);
-            int has_via = 0;
-            int pin_num = 1;
             for (int64_t idx = start_idx + 1; idx < end_idx; idx++) {
                 float cur_x = pin_pos[hyperedge_list[idx]][c];
                 x_min = min(cur_x, x_min);
                 x_max = max(cur_x, x_max);
-                if (cur_x > 20000 || cur_x < -100) printf("%f\n", cur_x);
-
-                if (hyperedge_list[idx] >= 98752) {has_via = 1;}
-                pin_num++;
             }
             partial_hpwl[i][c] = round((x_max - x_min));
-            if (has_via == 1) {
-                partial_cross_wl[i][c] = round((x_max - x_min));
-            } else {
-                partial_one_die_wl[i][c] = round((x_max - x_min));
-            }
             // partial_hpwl[i][c] = round(abs(x_max - x_min) * hpwl_scale[c]);
-            total_pin[i] = pin_num;
 
             float sum_x_exp_x = 0;
             float sum_x_exp_nx = 0;

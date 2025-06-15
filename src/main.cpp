@@ -180,6 +180,7 @@ argparse::ArgumentParser get_option(int argc, char* argv[]) {
     parser.add_argument("--draw_mat_size").default_value(double(1)).help("all use").scan<'g', double>();
     parser.add_argument("--omni_int").default_value(int(0)).help("all use'").scan<'i', int>();
     parser.add_argument("--omni_float").default_value(double(1)).help("all use").scan<'g', double>();
+    parser.add_argument("--transfer_txt").default_value(string("false")).help("transfer txt");
 
     try {
         parser.parse_args(argc, argv);

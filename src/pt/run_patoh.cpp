@@ -9,9 +9,9 @@ void Partitioner::run_patoh(NodeData &data, bool is_move_macro) {
     int *cwghts = new int[nNode];
     for (int i = 0; i < nNode; i++) {
         if (is_move_macro) {
-            cwghts[i] = static_cast<int>((nodes[i]->sizes[0] + nodes[i]->sizes[1]) / 2 / data.site_width * data.macro_mask[i].item<int>());
+            cwghts[i] = static_cast<int>((nodes[i]->sizes[0] + nodes[i]->sizes[1]) / 100 / data.site_width * data.macro_mask[i].item<int>());
         } else {
-            cwghts[i] = static_cast<int>((nodes[i]->sizes[0] + nodes[i]->sizes[1]) / 2 / data.site_width * (1 - data.macro_mask[i].item<int>()));
+            cwghts[i] = static_cast<int>((nodes[i]->sizes[0] + nodes[i]->sizes[1]) / 100 / data.site_width * (1 - data.macro_mask[i].item<int>()));
         }
         
     }
@@ -168,9 +168,14 @@ void Partitioner::run_patoh_area(NodeData &data) {
     logger.info("============= Running PaToH ============");
 
     int nNode = nodes.size();
-    int *cwghts = new int[nNode];
-    for (int i = 0; i < nNode; i++) cwghts[i] = static_cast<int>((nodes[i]->sizes[0] + nodes[i]->sizes[1]) / 2 / data.site_width);
-
+    int _nconst = 2;
+    int *cwghts = new int[nNode * _nconst];
+    for (int i = 0; i < nNode; i++) {
+        cwghts[i * _nconst] = static_cast<int>((nodes[i]->sizes[0] + nodes[i]->sizes[1]) / 100 / data.site_width);
+        for (int j = 1; j < _nconst; j++) {
+            cwghts[i * _nconst + j] = 1;
+        }
+    }
     int nNets = nets.size();
     int *nwghts = new int[nNets];
     for (int i = 0; i < nNets; i++) {
@@ -186,7 +191,6 @@ void Partitioner::run_patoh_area(NodeData &data) {
 
     int _c = nNode;
     int _n = nNets;
-    int _nconst = 1;
     int useFixCells = false;
 
     int nPin = 0;
@@ -221,19 +225,21 @@ void Partitioner::run_patoh_area(NodeData &data) {
     PaToH_Check_User_Parameters(&args, true);
 
     int *partvec = new int[nNode];
-    int *partweights = new int[numPart];
+    int *partweights = new int[numPart * _nconst];
     int cut;
     PaToH_Alloc(&args, _c, _n, _nconst, cwghts, nwghts, xpins, pins);
 
-    for (int i = 0; i < nNode; i++) partvec[i] = nodes[i]->group;
-    // for (int i = 0; i < nNode; i++) partvec[i] = -1; // FIXME:
+    // for (int i = 0; i < nNode; i++) partvec[i] = nodes[i]->group;
+    for (int i = 0; i < nNode; i++) partvec[i] = -1; // FIXME:
 
     logger.info("Partitioner::run_patoh, %s", "finish setting up");
 
-    float *targetweights = new float[2];
+    float *targetweights = new float[2 * _nconst];
     double ratio = data.tech_ratio.item<double>() + st::setting.top_util_filler;
-    targetweights[0] = ratio;
-    targetweights[1] = 1 - ratio;  // TODO:
+    for (int i = 0; i < _nconst; i++) {
+        targetweights[0 + i * 2] = ratio;
+        targetweights[1 + i * 2] = 1 - ratio; 
+    }
 
     PaToH_Part(
         &args, _c, _n, _nconst, useFixCells, cwghts, nwghts, xpins, pins, targetweights, partvec, partweights, &cut);

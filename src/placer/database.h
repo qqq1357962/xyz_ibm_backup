@@ -38,6 +38,7 @@ public:
     tuple<int, int> site_info;  // TODO:
     int site_width;
     int site_height;
+    int site_width_current;
 
     /* Node & Pin */
     torch::Tensor node_pos;

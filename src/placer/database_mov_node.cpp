@@ -287,16 +287,16 @@ tuple<at::Tensor, at::Tensor, at::Tensor> NodeData::get_mov_node_info_cross_chip
     }
 
     at::Tensor expand_ratio = torch::ones((mov_node_pos.size(0)), torch::dtype(mov_node_size.dtype()));
-    if (st::setting.clamp_node) {
-        logger.info("clamp nodes to sqrt2 size of bins");
-        // at::Tensor expand_ratio = mov_node_pos.new_ones((mov_node_pos.sizes()[0]));
-        at::Tensor __mov_node_area__ = torch::prod(mov_node_size, 1);
-        at::Tensor clamp_mov_node_size = mov_node_size.clamp(unit_len * sqrt(2));
-        at::Tensor clamp_mov_node_area = torch::prod(clamp_mov_node_size, 1);
-        // update
-        expand_ratio = __mov_node_area__ / clamp_mov_node_area;
-        mov_node_size = clamp_mov_node_size;
-    }
+    // if (st::setting.clamp_node) {
+    //     logger.info("clamp nodes to sqrt2 size of bins");
+    //     // at::Tensor expand_ratio = mov_node_pos.new_ones((mov_node_pos.sizes()[0]));
+    //     at::Tensor __mov_node_area__ = torch::prod(mov_node_size, 1);
+    //     at::Tensor clamp_mov_node_size = mov_node_size.clamp(unit_len * sqrt(2));
+    //     at::Tensor clamp_mov_node_area = torch::prod(clamp_mov_node_size, 1);
+    //     // update
+    //     expand_ratio = __mov_node_area__ / clamp_mov_node_area;
+    //     mov_node_size = clamp_mov_node_size;
+    // }
 
     /* updata pin rel pos */
     // for (int i = 0; i < num_nets; ++i) {
