@@ -309,8 +309,8 @@ void NodeData3D::compute_filler() {
 
     at::Tensor single_sideline_ll = die_ll - 1e-4;
     at::Tensor single_sideline_ur = die_ur - die_ll - 1e-4;
-    at::Tensor single_sideline_ll_io = (-__die_shift__ / __die_scale__);
-    at::Tensor single_sideline_ur_io = single_sideline_ur * 2;
+    at::Tensor single_sideline_ll_io = (-__die_shift__ / __die_scale__) - mov_node_size[iopin_mov_lhs];
+    at::Tensor single_sideline_ur_io = single_sideline_ur * 2 + mov_node_size[iopin_mov_lhs];
 
     sidelines_ll = single_sideline_ll.repeat({num_nodes, 1});
     sidelines_ur = single_sideline_ur.repeat({num_nodes, 1});
@@ -580,6 +580,7 @@ tuple<at::Tensor, at::Tensor, at::Tensor> NodeData3D::get_mov_node_info() {
                 die_area.item<float>());
 
     at::Tensor expand_ratio = torch::ones((mov_node_pos.size(0)), torch::dtype(mov_node_size.dtype()));
+    auto io_pin_size = mov_node_size.index({Slice(iopin_mov_lhs, iopin_mov_rhs), "..."}).clone();
     if (clamp_node) {
         // logger.info("Cells clamped to bin size on x/y direction");
         at::Tensor __mov_node_area__ = torch::prod(mov_node_size, 1);
@@ -597,6 +598,13 @@ tuple<at::Tensor, at::Tensor, at::Tensor> NodeData3D::get_mov_node_info() {
         expand_ratio = __mov_node_area__ / clamp_mov_node_area;
         mov_node_size = clamp_mov_node_size;
     }
+    auto io_expand_ratio = torch::ones({iopin_mov_rhs - iopin_mov_lhs}, torch::dtype(expand_ratio.dtype()));
+    expand_ratio = torch::cat({expand_ratio.index({Slice(mov_lhs, iopin_mov_lhs)}),
+                               io_expand_ratio,
+                               expand_ratio.index({Slice(mov_rhs, torch::indexing::None)})}, 0);
+    mov_node_size = torch::cat({mov_node_size.index({Slice(mov_lhs, iopin_mov_lhs), "..."}),
+                               io_pin_size,
+                               mov_node_size.index({Slice(mov_rhs, torch::indexing::None), "..."})}, 0);
 
     mov_node_weight = torch::ones({mov_node_pos.size(0)}, dtype(mov_node_pos.dtype()));
     mov_node_weights[0] = mov_node_weight;

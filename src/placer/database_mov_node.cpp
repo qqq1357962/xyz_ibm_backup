@@ -18,8 +18,8 @@ tuple<at::Tensor, at::Tensor, at::Tensor> NodeData::get_mov_node_info() {
                                                         (float)st::setting.sideline}, dtype(torch::kFloat));
     
     int num_ios = iopin_mov_rhs - iopin_mov_lhs;
-    torch::Tensor single_sideline_ll_io = (-__die_shift__ / __die_scale__);
-    torch::Tensor single_sideline_ur_io = single_sideline_ur * 2;
+    torch::Tensor single_sideline_ll_io = (-__die_shift__ / __die_scale__) - mov_node_size[iopin_mov_lhs];
+    torch::Tensor single_sideline_ur_io = single_sideline_ur * 2 + mov_node_size[iopin_mov_lhs];
     mov_node_sideline_ll = torch::cat({single_sideline_ll.repeat({num_nodes - num_ios, 1}), single_sideline_ll_io.repeat({num_ios, 1}), single_sideline_ll.repeat({__num_fillers__, 1})}, 0);
     mov_node_sideline_ur = torch::cat({single_sideline_ur.repeat({num_nodes - num_ios, 1}), single_sideline_ur_io.repeat({num_ios, 1}), single_sideline_ur.repeat({__num_fillers__, 1})}, 0);
     mov_node_sideline_ll += single_sideline_space_ll;
@@ -52,14 +52,14 @@ tuple<at::Tensor, at::Tensor, at::Tensor> NodeData::get_mov_node_info() {
     }
     // at::Tensor expand_ratio = mov_node_pos.new_ones((mov_node_pos.sizes()[0]));
     at::Tensor expand_ratio = torch::ones((mov_node_pos.size(0)), torch::dtype(mov_node_size.dtype()));
-    if (st::setting.clamp_node) {
-        at::Tensor __mov_node_area__ = torch::prod(mov_node_size, 1);
-        at::Tensor clamp_mov_node_size = mov_node_size.clamp(unit_len * sqrt(2));
-        at::Tensor clamp_mov_node_area = torch::prod(clamp_mov_node_size, 1);
-        // update
-        expand_ratio = __mov_node_area__ / clamp_mov_node_area;
-        mov_node_size = clamp_mov_node_size;
-    }
+    // if (st::setting.clamp_node) {
+    //     at::Tensor __mov_node_area__ = torch::prod(mov_node_size, 1);
+    //     at::Tensor clamp_mov_node_size = mov_node_size.clamp(unit_len * sqrt(2));
+    //     at::Tensor clamp_mov_node_area = torch::prod(clamp_mov_node_size, 1);
+    //     // update
+    //     expand_ratio = __mov_node_area__ / clamp_mov_node_area;
+    //     mov_node_size = clamp_mov_node_size;
+    // }
     mov_node_pos.index({Slice(iopin_mov_lhs, iopin_mov_rhs), Slice(0, 2)}) = node_pos.index({Slice(iopin_mov_lhs, iopin_mov_rhs), Slice(0, 2)});
     return make_tuple(mov_node_pos, mov_node_size, expand_ratio);
 }  // END MODULE
@@ -201,7 +201,9 @@ tuple<at::Tensor, at::Tensor, at::Tensor> NodeData::get_mov_node_info_cross_chip
         torch::Tensor filler_die = torch::ones(num_fillers_cc[i], torch::dtype(mov_node_die.dtype())) * i;
         mov_node_die = torch::cat({mov_node_die, filler_die}, 0);
 
-        logger.info("#Fillers: %d Filler size: (%.4e, %.4e)", num_fillers_cc[i], single_filler_size[0].item<double>(),
+        logger.info("#Fillers: %d Filler size: (%.4e, %.4e)",
+                    num_fillers_cc[i],
+                    single_filler_size[0].item<double>(),
                     single_filler_size[1].item<double>());
     }
 

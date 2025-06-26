@@ -13,9 +13,9 @@ bool draw_fig_with_cairo_cpp(torch::Tensor node_pos,
     auto _die_info = data.die_info_back_up;  // FIXME:
 
     double lx = _die_info[0].item().toDouble();
-    double hx = _die_info[1].item().toDouble();
+    double hx = _die_info[1].item().toDouble() * 1.01;
     double ly = _die_info[2].item().toDouble();
-    double hy = _die_info[3].item().toDouble();
+    double hy = _die_info[3].item().toDouble() * 1.01;
     auto die_info = make_tuple(lx, hx, ly, hy);
 
     // TODO: disable prescale

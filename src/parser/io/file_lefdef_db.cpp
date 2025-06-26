@@ -653,15 +653,9 @@ bool Database::write_Openroad(const string& inputDef, const string& outputDef, c
         istringstream iss(line);
         string s;
         if (!(iss >> s)) {
-            if (load_pin) {
-                ofs << line << "+ PORT" << endl;
-            } else {
-                ofs << line << endl;
-            }
+            ofs << line << endl;
             continue;
-        } else if (s != "COMPONENTS" && s != "NETS") {
-            if (s == "PINS") load_pin = true;
-            if (s == "END") load_pin = false;
+        } else if (s != "COMPONENTS" && s != "NETS" && s != "PINS") {
             ofs << line << endl;
             continue;
         } 
@@ -670,9 +664,40 @@ bool Database::write_Openroad(const string& inputDef, const string& outputDef, c
         } else if (s == "NETS") {
             writeNets(ofs, node_selected);
         } 
-        // else if (s == "PINS") {
-        //     writePins(ofs, node_selected);
-        // }
+        else if (s == "PINS") {
+            int pin_num = 0;
+            for (IOPin* iopin : iopins) {
+                if (node_selected[iopin->gpdb_id] == 1 || iopin->name.substr(0, 3) == "clk" || iopin->name.substr(0, 5) == "clock") {
+                    pin_num++;
+                }
+            }
+            ofs << "PINS " << pin_num << " ;\n";
+            int id = -1;
+            while (getline(ifs, line)) {
+                istringstream iss(line);
+                string s;
+                if (iss >> s) {
+                    if (s == "-") {
+                        id++;
+                        IOPin* iopin = iopins[id];
+                        if (node_selected[iopin->gpdb_id] == 1 || iopin->name.substr(0, 3) == "clk" || iopin->name.substr(0, 5) == "clock") {
+                            ofs << line << endl;
+                            getline(ifs, line);
+                            ofs << line << "+ PORT" << endl;
+                            getline(ifs, line);
+                            ofs << line << endl;
+                            getline(ifs, line);
+                            ofs << "\t\t  + " << "PLACED ( " << iopin->x << " " << iopin->y << " ) N ;\n";
+                        }
+                    }
+                    if (s == "END") {
+                        break;
+                    }
+                }
+            }
+            ofs << "END PINS" << endl;
+            continue;
+        }
         while (getline(ifs, line)) {
             istringstream iss(line);
             if (iss >> s && s == "END") {
@@ -1650,8 +1675,8 @@ int readDefPin(defrCallbackType_e c, defiPin* dpin, defiUserData ud) {
     IOPin* iopin = db->addIOPin(string(dpin->pinName()), string(dpin->netName()), direction);
 
     if (dpin->hasPlacement()) {
-        iopin->x = dpin->placementX();
-        iopin->y = dpin->placementY();
+        iopin->x = std::lround(static_cast<float>(dpin->placementX()) / 10) * 10;
+        iopin->y = std::lround(static_cast<float>(dpin->placementY()) / 10) * 10;
         iopin->_flipX = isFlipX(dpin->orient());
         iopin->_flipY = isFlipY(dpin->orient());
     }

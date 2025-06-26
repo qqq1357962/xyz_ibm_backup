@@ -12,7 +12,38 @@ void Partitioner::run_fm_wl(NodeData& data, bool skip) {
     // auto node_pos = data.node_pos;
     auto node_pos = node_pos_2d_ground;
     auto node_size = data.node_size;
+    macro_mask = data.macro_mask.clone();
     // node_die = data.node_die;
+
+    vector<Macro_Box> Macro_Boxs;
+    auto node_pos_a = node_pos.accessor<float, 2>();
+    auto node_size_a = node_size.accessor<float, 2>();
+    auto macro_mask_a = macro_mask.accessor<float, 1>();
+    auto non_zero_indices = torch::nonzero(macro_mask);
+    auto non_zero_num = macro_mask.sum().item<int>();
+    for (int i = 0; i < non_zero_num; i++) {
+        Macro_Boxs.emplace_back(
+            node_pos_a[non_zero_indices[i].item<int>()][0] - node_size_a[non_zero_indices[i].item<int>()][0] / 2,
+            node_pos_a[non_zero_indices[i].item<int>()][1] - node_size_a[non_zero_indices[i].item<int>()][1] / 2,
+            node_pos_a[non_zero_indices[i].item<int>()][0] + node_size_a[non_zero_indices[i].item<int>()][0] / 2,
+            node_pos_a[non_zero_indices[i].item<int>()][1] + node_size_a[non_zero_indices[i].item<int>()][1] / 2);
+    }
+
+    for (int i = 0; i < num_nodes; ++i) {
+        if (macro_mask_a[i] != 1) {
+            for (auto j : Macro_Boxs) {
+                bool inside_macro = j.comp(node_pos_a[i][0] - node_size_a[i][0] / 2,
+                                           node_pos_a[i][1] - node_size_a[i][1] / 2,
+                                           node_pos_a[i][0] + node_size_a[i][0] / 2,
+                                           node_pos_a[i][1] + node_size_a[i][1] / 2);
+                if (inside_macro) {
+                    macro_mask_a[i] = 1;
+                    break;
+                }
+            }
+        }
+    }
+
 
     /* updata pin rel pos */
     for (int i = 0; i < num_pins; ++i) {
@@ -41,7 +72,7 @@ void Partitioner::run_fm_wl(NodeData& data, bool skip) {
     data.hyperedge_list_end = data.hyperedge_list_end.to(device);
     torch::Tensor pin_pos = wa_wirelength_hpwl::nodePosToPinPos(
         node_pos.to(device), data.pin_id2node_id.to(device), data.pin_rel_cpos.to(device));
-    torch::Tensor hpwl = torch::sum(wa_wirelength_hpwl::get_hpwl(data, pin_pos.detach())) * data.site_width; // FIXME:
+    torch::Tensor hpwl = torch::sum(wa_wirelength_hpwl::get_hpwl(data, pin_pos.detach())); // FIXME:
     float hpwl_float = (hpwl + hpwl_ovlp).item<float>();
     logger.info("============= Before WL-PT, estimated wl cross-chip (%f + %f = %f) =============",
                 hpwl.item<float>(),
@@ -71,7 +102,7 @@ void Partitioner::run_fm_wl(NodeData& data, bool skip) {
     hpwl_track = hpwl_float;
     rpt_cut_size();
     //for (int iteration = 0; iteration < max_iters && running; iteration++) {
-    for (int iteration = 0; iteration < 0 && running; iteration++) {
+    for (int iteration = 0; iteration < max_iters && running; iteration++) {
         initList(iteration != 0);
         initWLGain(pt_db, false);
         passWL(pt_db);
@@ -87,7 +118,7 @@ void Partitioner::run_fm_wl(NodeData& data, bool skip) {
         data.hyperedge_list_end = data.hyperedge_list_end.to(device);
         pin_pos = wa_wirelength_hpwl::nodePosToPinPos(
             node_pos.to(device), data.pin_id2node_id.to(device), data.pin_rel_cpos.to(device));
-        hpwl = torch::sum(wa_wirelength_hpwl::get_hpwl(data, pin_pos.detach())) * data.site_width; // FIXME:
+        hpwl = torch::sum(wa_wirelength_hpwl::get_hpwl(data, pin_pos.detach())); // FIXME:
         data.hyperedge_list = data.hyperedge_list.to(torch::kCPU);
         data.hyperedge_list_end = data.hyperedge_list_end.to(torch::kCPU);
 
@@ -110,7 +141,7 @@ void Partitioner::run_fm_wl(NodeData& data, bool skip) {
     data.hyperedge_list_end = data.hyperedge_list_end.to(device);
     pin_pos = wa_wirelength_hpwl::nodePosToPinPos(
         node_pos.to(device), data.pin_id2node_id.to(device), data.pin_rel_cpos.to(device));
-    hpwl = torch::sum(wa_wirelength_hpwl::get_hpwl(data, pin_pos.detach())) * data.site_width; // FIXME:
+    hpwl = torch::sum(wa_wirelength_hpwl::get_hpwl(data, pin_pos.detach())); // FIXME:
     data.hyperedge_list = data.hyperedge_list.to(torch::kCPU);
     data.hyperedge_list_end = data.hyperedge_list_end.to(torch::kCPU);
 
@@ -144,109 +175,109 @@ void Partitioner::run_fm_wl(NodeData& data, bool skip) {
                 (mov_cell_areas[0] / max_mov_cell_areas[0]).item<double>(),
                 (mov_cell_areas[1] / max_mov_cell_areas[1]).item<double>());
 
-    /* validate max-utilization constraints */
-    int forced_moved_stdcell = 0;
-    int forced_moved_macro = 0;
-    // mov_cell_areas = torch::zeros(2, torch::dtype(torch::kLong));
-    //比例大的优先去top die，比例小的优先去bottom die
-    //给一个双向指针, 大的检测bottom,不行送去top,, 小的检测top, 
-    float area_bot = mov_cell_areas[0].item<float>();
-    float area_top = mov_cell_areas[1].item<float>();
-    float bound_bot = max_mov_cell_areas[0].item<float>();
-    float bound_top = max_mov_cell_areas[1].item<float>();
-    if(area_bot>bound_bot || area_top>bound_top)
-    {
-        auto ratio_nodes = data.node_area_bot.to(torch::kFloat32)/data.node_area_top.to(torch::kFloat32);
-        auto [sorted_tensor, indices] = ratio_nodes.sort();
-        int p_top = 0;
-        int p_bot = num_nodes-1;
-        int force_moved_cnt = 0;
-        int bottom_to_top_cnt = 0;
-        int top_to_bottom_cnt = 0;
-        int move_macro=false;
-        for (int i = 0; i < num_nodes; i++) {
-            if(area_bot<=bound_bot && area_top<=bound_top)
-            {
-                logger.info("in round %d, area is finally legalized! %d cells are moved in validation step", i, force_moved_cnt);
-                logger.info("during the process, %d cells are moved from top to bottom, %d cells are moved from bottom to top", 
-                            top_to_bottom_cnt, bottom_to_top_cnt);
-                break;
-            }
-            if(area_top>bound_top)
-            {
-                int node_id = indices[p_top].item<int>();
-                if(data.macro_mask[node_id].item<int>()==1&&(!move_macro))
-                {
-                }
-                else if(node_die[node_id].item<int>()==1)
-                {
-                    node_die[node_id]=0;
-                    area_top-=nodes[node_id]->sizes[1];
-                    area_bot+=nodes[node_id]->sizes[0];
-                    force_moved_cnt++;
-                    top_to_bottom_cnt++;
-                }
-                p_top++;
-            }
-            if(area_bot>bound_bot)
-            {
-                int node_id = indices[p_bot].item<int>();
-                if(data.macro_mask[node_id].item<int>()==1&&(!move_macro))
-                {
-                }
-                else if(node_die[node_id].item<int>()==0)
-                {
-                    node_die[node_id]=1;
-                    area_top+=nodes[node_id]->sizes[1];
-                    area_bot-=nodes[node_id]->sizes[0];
-                    force_moved_cnt++;
-                    bottom_to_top_cnt++;
-                }
-                p_bot--;
-            }
-        }
-        if(area_bot<=bound_bot && area_top<=bound_top)
-        {
-            logger.info("can not legalize!");
-            logger.info("during the process, %d cells are moved from top to bottom, %d cells are moved from bottom to top", 
-                    top_to_bottom_cnt, bottom_to_top_cnt);
-        }
-    }else{
-        logger.info("in force legalization step, already legal!");
-    }
-    logger.info("after validation, top: %f/%f, bot: %f/%f",area_top, bound_top,area_bot, bound_bot);
-    
-
-    
-    // for (int i = 0; i < num_nodes; i++) {
-    //     int group = node_die[i].item<int>();
-    //     if (st::setting.clamp_util) {
-    //         if ((mov_cell_areas[group] + nodes[i]->sizes[group] > max_mov_cell_areas[group]).item<bool>())
+    // /* validate max-utilization constraints */
+    // int forced_moved_stdcell = 0;
+    // int forced_moved_macro = 0;
+    // // mov_cell_areas = torch::zeros(2, torch::dtype(torch::kLong));
+    // //比例大的优先去top die，比例小的优先去bottom die
+    // //给一个双向指针, 大的检测bottom,不行送去top,, 小的检测top, 
+    // float area_bot = mov_cell_areas[0].item<float>();
+    // float area_top = mov_cell_areas[1].item<float>();
+    // float bound_bot = max_mov_cell_areas[0].item<float>();
+    // float bound_top = max_mov_cell_areas[1].item<float>();
+    // if(area_bot>bound_bot || area_top>bound_top)
+    // {
+    //     auto ratio_nodes = data.node_area_bot.to(torch::kFloat32)/data.node_area_top.to(torch::kFloat32);
+    //     auto [sorted_tensor, indices] = ratio_nodes.sort();
+    //     int p_top = 0;
+    //     int p_bot = num_nodes-1;
+    //     int force_moved_cnt = 0;
+    //     int bottom_to_top_cnt = 0;
+    //     int top_to_bottom_cnt = 0;
+    //     int move_macro=false;
+    //     for (int i = 0; i < num_nodes; i++) {
+    //         if(area_bot<=bound_bot && area_top<=bound_top)
     //         {
-    //             if(data.macro_mask[i].item<int>()==1)
+    //             logger.info("in round %d, area is finally legalized! %d cells are moved in validation step", i, force_moved_cnt);
+    //             logger.info("during the process, %d cells are moved from top to bottom, %d cells are moved from bottom to top", 
+    //                         top_to_bottom_cnt, bottom_to_top_cnt);
+    //             break;
+    //         }
+    //         if(area_top>bound_top)
+    //         {
+    //             int node_id = indices[p_top].item<int>();
+    //             if(data.macro_mask[node_id].item<int>()==1&&(!move_macro))
     //             {
-    //                 logger.info("moving macro %d from %d to %d", i, group, !group);
-    //                 forced_moved_macro++;
-    //             }else{
-    //                 forced_moved_stdcell++;
     //             }
-    //             group = !group;
+    //             else if(node_die[node_id].item<int>()==1)
+    //             {
+    //                 node_die[node_id]=0;
+    //                 area_top-=nodes[node_id]->sizes[1];
+    //                 area_bot+=nodes[node_id]->sizes[0];
+    //                 force_moved_cnt++;
+    //                 top_to_bottom_cnt++;
+    //             }
+    //             p_top++;
+    //         }
+    //         if(area_bot>bound_bot)
+    //         {
+    //             int node_id = indices[p_bot].item<int>();
+    //             if(data.macro_mask[node_id].item<int>()==1&&(!move_macro))
+    //             {
+    //             }
+    //             else if(node_die[node_id].item<int>()==0)
+    //             {
+    //                 node_die[node_id]=1;
+    //                 area_top+=nodes[node_id]->sizes[1];
+    //                 area_bot-=nodes[node_id]->sizes[0];
+    //                 force_moved_cnt++;
+    //                 bottom_to_top_cnt++;
+    //             }
+    //             p_bot--;
     //         }
     //     }
-    //     mov_cell_areas[group] += nodes[i]->sizes[group];
-    //     nodes[i]->group = group;
-    //     node_die[i] = group;
+    //     if(area_bot<=bound_bot && area_top<=bound_top)
+    //     {
+    //         logger.info("can not legalize!");
+    //         logger.info("during the process, %d cells are moved from top to bottom, %d cells are moved from bottom to top", 
+    //                 top_to_bottom_cnt, bottom_to_top_cnt);
+    //     }
+    // }else{
+    //     logger.info("in force legalization step, already legal!");
     // }
-    // logger.info("%d std cells and %d macros are moved in validation step after wl-fm", forced_moved_stdcell, forced_moved_macro);
+    // logger.info("after validation, top: %f/%f, bot: %f/%f",area_top, bound_top,area_bot, bound_bot);
+    
 
-    logger.info("============ Legalized partition result ============");
-    rpt_cut_size();
-    logger.info("#Cells for each chip (%d, %d)", (1 - node_die).sum().item<int>(), node_die.sum().item<int>());
-    logger.info("Areas for each chip (%ld, %ld)", (mov_cell_areas[0]).item<long>(), (mov_cell_areas[1]).item<long>());
-    logger.info("Utils for each chip (%.2f, %.2f)",
-                (mov_cell_areas[0] / max_mov_cell_areas[0]).item<double>(),
-                (mov_cell_areas[1] / max_mov_cell_areas[1]).item<double>());
-    data.node_die = node_die;
+    
+    // // for (int i = 0; i < num_nodes; i++) {
+    // //     int group = node_die[i].item<int>();
+    // //     if (st::setting.clamp_util) {
+    // //         if ((mov_cell_areas[group] + nodes[i]->sizes[group] > max_mov_cell_areas[group]).item<bool>())
+    // //         {
+    // //             if(data.macro_mask[i].item<int>()==1)
+    // //             {
+    // //                 logger.info("moving macro %d from %d to %d", i, group, !group);
+    // //                 forced_moved_macro++;
+    // //             }else{
+    // //                 forced_moved_stdcell++;
+    // //             }
+    // //             group = !group;
+    // //         }
+    // //     }
+    // //     mov_cell_areas[group] += nodes[i]->sizes[group];
+    // //     nodes[i]->group = group;
+    // //     node_die[i] = group;
+    // // }
+    // // logger.info("%d std cells and %d macros are moved in validation step after wl-fm", forced_moved_stdcell, forced_moved_macro);
+
+    // logger.info("============ Legalized partition result ============");
+    // rpt_cut_size();
+    // logger.info("#Cells for each chip (%d, %d)", (1 - node_die).sum().item<int>(), node_die.sum().item<int>());
+    // logger.info("Areas for each chip (%ld, %ld)", (mov_cell_areas[0]).item<long>(), (mov_cell_areas[1]).item<long>());
+    // logger.info("Utils for each chip (%.2f, %.2f)",
+    //             (mov_cell_areas[0] / max_mov_cell_areas[0]).item<double>(),
+    //             (mov_cell_areas[1] / max_mov_cell_areas[1]).item<double>());
+    // data.node_die = node_die;
     
     if (true) {
         int count = 0;
@@ -257,15 +288,19 @@ void Partitioner::run_fm_wl(NodeData& data, bool skip) {
     }
 
     /* visualize partition */
-    if (false) {
+    if (true) {
         torch::Tensor node_size_bot = data.node_size_bot * (1 - node_die).unsqueeze(1);
         torch::Tensor node_size_top = data.node_size_top * node_die.unsqueeze(1);
+        auto cell_node_pos = node_pos.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs)});
+        auto node_shift = (data.__die_shift__.index({Slice(0, 2)}) / data.__die_scale__.index({Slice(0, 2)}))
+                              .expand_as(cell_node_pos);
+        cell_node_pos = cell_node_pos + node_shift;
         auto info1 = make_tuple(st::setting.round_recursion, 0, data.design_name + "_PT_FMWL_0");
-        draw_fig_with_cairo_cpp(node_pos, node_size_bot, data, info1);
+        draw_fig_with_cairo_cpp(cell_node_pos, node_size_bot, data, info1);
         auto info2 = make_tuple(st::setting.round_recursion, 0, data.design_name + "_PT_FMWL_1");
-        draw_fig_with_cairo_cpp(node_pos, node_size_top, data, info2);
+        draw_fig_with_cairo_cpp(cell_node_pos, node_size_top, data, info2);
         auto info3 = make_tuple(st::setting.round_recursion, 0, data.design_name + "_PT_FMWL_2");
-        auto node_pos_draw_cp = torch::cat({node_pos, node_pos}, 0);
+        auto node_pos_draw_cp = torch::cat({cell_node_pos, cell_node_pos}, 0);
         auto node_size_draw_cp = torch::cat({node_size_bot, node_size_top}, 0);
         draw_fig_with_cairo_cpp_cross_chip(node_pos_draw_cp, node_size_draw_cp, data, info3);
     }
@@ -276,6 +311,65 @@ void Partitioner::run_fm_wl(NodeData& data, bool skip) {
 void Partitioner::initWLGain(pt::PartitionData& db, bool update) {
     freecells = torch::ones(num_nodes, dtype(torch::kBool));
     gainlist = torch::zeros(num_nodes, dtype(torch::kFloat));
+    density_gainlist = torch::zeros(num_nodes, dtype(torch::kFloat));
+    mov_node_xl = torch::zeros({2, num_nodes}, dtype(torch::kFloat));
+    mov_node_xh = torch::zeros({2, num_nodes}, dtype(torch::kFloat));
+    mov_node_yl = torch::zeros({2, num_nodes}, dtype(torch::kFloat));
+    mov_node_yh = torch::zeros({2, num_nodes}, dtype(torch::kFloat));
+    mov_node_xl_b = torch::zeros({2, num_nodes}, dtype(torch::kInt));
+    mov_node_yl_b = torch::zeros({2, num_nodes}, dtype(torch::kInt));
+    mov_node_xh_b = torch::zeros({2, num_nodes}, dtype(torch::kInt));
+    mov_node_yh_b = torch::zeros({2, num_nodes}, dtype(torch::kInt));
+    num_x_bin = 512;
+    num_y_bin = 512;
+    float min_xl = std::numeric_limits<float>::max();
+    float max_xh = -std::numeric_limits<float>::max();
+    float min_yl = std::numeric_limits<float>::max();
+    float max_yh = -std::numeric_limits<float>::max();
+    for (int i = 0; i < num_nodes; i++) {
+        for (int n = 0; n < 2; n++) {
+            min_xl = min(min_xl, db.x[i] - db.node_size_xs[n][i] / 2);
+            max_xh = max(max_xh, db.x[i] + db.node_size_xs[n][i] / 2);
+            min_yl = min(min_yl, db.y[i] - db.node_size_ys[n][i] / 2);
+            max_yh = max(max_yh, db.y[i] + db.node_size_ys[n][i] / 2);
+        }
+    }
+    max_xh += 1;
+    max_yh += 1;
+    unit_len_x = (max_xh - min_xl) / num_x_bin;
+    unit_len_y = (max_yh - min_yl) / num_y_bin;
+    density_map = torch::zeros({2, num_x_bin, num_y_bin}, dtype(torch::kFloat));
+    auto density_map_a = density_map.accessor<float, 3>();
+
+    for (int i = 0; i < num_nodes; i++) {
+        int node_id = i;
+        int c_id = db.node_die[node_id];
+        float node_xl = (db.x[node_id] - db.node_size_xs[c_id][node_id] / 2 - min_xl) / unit_len_x;
+        float node_xh = (db.x[node_id] + db.node_size_xs[c_id][node_id] / 2 - min_xl) / unit_len_x;
+        float node_yl = (db.y[node_id] - db.node_size_ys[c_id][node_id] / 2 - min_yl) / unit_len_y;
+        float node_yh = (db.y[node_id] + db.node_size_ys[c_id][node_id] / 2 - min_yl) / unit_len_y;
+        int node_xl_b = static_cast<int>(std::floor(node_xl));
+        int node_yl_b = static_cast<int>(std::floor(node_yl));
+        int node_xh_b = static_cast<int>(std::floor(node_xh));
+        int node_yh_b = static_cast<int>(std::floor(node_yh));
+
+        for (int j = node_xl_b; j < node_xh_b + 1; j++) {
+            float bin_x_l = static_cast<float>(j);
+            float overlap_x = overlap(node_xl, node_xh, bin_x_l);
+            for (int k = node_yl_b; k < node_yh_b + 1; k++) {
+                float bin_y_l = static_cast<float>(k);
+                float overlap_y = overlap(node_yl, node_yh, bin_y_l);
+                float overlap_area = overlap_x * overlap_y;
+                density_map_a[c_id][j][k] += overlap_area;
+            }
+        }
+    }
+
+    auto non_zero_indices = torch::nonzero(macro_mask);
+    auto non_zero_num = macro_mask.sum().item<int>();
+    for (int i = 0; i < non_zero_num; i++) {
+        gainlist[non_zero_indices[i].item<int>()] = -std::numeric_limits<float>::max();
+    }
 
     /* get bucket list */
     for (int i = 0; i < num_nets; ++i) {
@@ -396,8 +490,56 @@ void Partitioner::initWLGain(pt::PartitionData& db, bool update) {
             float wl = boxs[0] + boxs[1];
             float wl_swap = box_swaps[0] + box_swaps[1];
             float gain = wl - wl_swap;
-            nodes[node_id]->gain_map[i] = gain;
-            gainlist[node_id] += gain;
+            if (macro_mask[node_id].item<int>() == 1) {
+                nodes[node_id]->gain_map[i] = -std::numeric_limits<float>::max();
+                gainlist[node_id] = -std::numeric_limits<float>::max();
+            } else {
+                nodes[node_id]->gain_map[i] = gain;
+                gainlist[node_id] += gain;
+            }
+        }
+    }
+
+    for (int i = 0; i < num_nodes; i++) {
+        int node_id = i;
+        if (macro_mask[node_id].item<int>() == 1) {
+            density_gainlist[node_id] = -std::numeric_limits<float>::max();
+        } else {
+            int c_id = db.node_die[node_id];
+            float gain_density = 0;
+            for (int n = 0; n < 2; n++) {
+                int c_id_ = (n == 0) ? c_id : (1 - c_id);
+                float node_xl = (db.x[node_id] - db.node_size_xs[c_id_][node_id] / 2 - min_xl) / unit_len_x;
+                float node_xh = (db.x[node_id] + db.node_size_xs[c_id_][node_id] / 2 - min_xl) / unit_len_x;
+                float node_yl = (db.y[node_id] - db.node_size_ys[c_id_][node_id] / 2 - min_yl) / unit_len_y;
+                float node_yh = (db.y[node_id] + db.node_size_ys[c_id_][node_id] / 2 - min_yl) / unit_len_y;
+                int node_xl_b = static_cast<int>(std::floor(node_xl));
+                int node_yl_b = static_cast<int>(std::floor(node_yl));
+                int node_xh_b = static_cast<int>(std::floor(node_xh));
+                int node_yh_b = static_cast<int>(std::floor(node_yh));
+                mov_node_xl[c_id_][node_id] = node_xl;
+                mov_node_xh[c_id_][node_id] = node_xh;
+                mov_node_yl[c_id_][node_id] = node_yl;
+                mov_node_yh[c_id_][node_id] = node_yh;
+                mov_node_xl_b[c_id_][node_id] = node_xl_b;
+                mov_node_xh_b[c_id_][node_id] = node_xh_b;
+                mov_node_yl_b[c_id_][node_id] = node_yl_b;
+                mov_node_yh_b[c_id_][node_id] = node_yh_b;
+                float current_density = 0;
+
+                for (int j = node_xl_b; j < node_xh_b + 1; j++) {
+                    float bin_x_l = static_cast<float>(j);
+                    float overlap_x = overlap(node_xl, node_xh, bin_x_l);
+                    for (int k = node_yl_b; k < node_yh_b + 1; k++) {
+                        float bin_y_l = static_cast<float>(k);
+                        float overlap_y = overlap(node_yl, node_yh, bin_y_l);
+                        float overlap_area = overlap_x * overlap_y;
+                        current_density += overlap_area * (density_map_a[c_id_][j][k] + ((n == 0) ? 0 : overlap_area));
+                    }
+                }
+                gain_density += (n == 0) ? current_density : (-current_density);
+            }
+            density_gainlist[node_id] = gain_density;
         }
     }
 }  // END MODULE
@@ -408,7 +550,7 @@ void Partitioner::passWL(pt::PartitionData& db) {
     int num_free = num_nodes;
     float GAIN_ITER = 0, GAIN_MAX = 0;
     int maxGAINIndex = -1;
-    int num_swaps = num_nodes / 10;
+    int num_swaps = num_nodes / 50;
 
     float progress = 0.0;
     vector<float> hpwls(num_swaps + 1);
@@ -449,8 +591,9 @@ void Partitioner::passWL(pt::PartitionData& db) {
                                .item<float>()},
                           torch::dtype(torch::kFloat)));
         // cout << node_cost_area << endl;
-        auto cost_list = gainlist.clone();
-        cost_list *= node_cost_area.index_select(0, pt_db_at_ptr->node_die);
+        auto cost_list = gainlist.clone() + density_gainlist.clone();
+        auto cost_list_ = cost_list.clone();
+        // cost_list *= node_cost_area.index_select(0, pt_db_at_ptr->node_die);
 
         // int cell_mov_idx = torch::argmax(gainlist, 0).item<int>();
         int cell_mov_idx = torch::argmax(cost_list, 0).item<int>();
@@ -461,7 +604,12 @@ void Partitioner::passWL(pt::PartitionData& db) {
 
         auto cell_mov = nodes[cell_mov_idx];
 
-        float gain = gainlist[cell_mov_idx].item<float>();
+        // cout << gainlist.max().item<float>() / density_gainlist.max().item<float>() << endl;
+
+        float gain = cost_list_[cell_mov_idx].item<float>();
+        if (macro_mask[cell_mov_idx].item<int>() == 1) {
+            cout << gain << endl;
+        }
         GAIN_ITER += gain;
 
         int cut_gain = cell_mov->gain;
@@ -631,6 +779,38 @@ void Partitioner::swap_node(pt::PartitionData& db, int cell_mov) {
         db.pin_offset_x[node_pin_id] = db.pin_offset_xs[other_c_id][node_pin_id];
         db.pin_offset_y[node_pin_id] = db.pin_offset_ys[other_c_id][node_pin_id];
     }
+
+    cell_xl = torch::zeros({2}, dtype(torch::kInt));
+    cell_xh = torch::zeros({2}, dtype(torch::kInt));
+    cell_yl = torch::zeros({2}, dtype(torch::kInt));
+    cell_yh = torch::zeros({2}, dtype(torch::kInt));
+    for (int n = 0; n < 2; n++) {
+        int c_id_ = (n == 0) ? c_id : (1 - c_id);
+        float node_xl = mov_node_xl[c_id_][cell_mov].item<float>();
+        float node_xh = mov_node_xh[c_id_][cell_mov].item<float>();
+        float node_yl = mov_node_yl[c_id_][cell_mov].item<float>();
+        float node_yh = mov_node_yh[c_id_][cell_mov].item<float>();
+        int node_xl_b = mov_node_xl_b[c_id_][cell_mov].item<int>();
+        int node_yl_b = mov_node_yl_b[c_id_][cell_mov].item<int>();
+        int node_xh_b = mov_node_xh_b[c_id_][cell_mov].item<int>();
+        int node_yh_b = mov_node_yh_b[c_id_][cell_mov].item<int>();
+        cell_xl[c_id_] = node_xl_b;
+        cell_yl[c_id_] = node_yl_b;
+        cell_xh[c_id_] = node_xh_b;
+        cell_yh[c_id_] = node_yh_b;
+
+        for (int j = node_xl_b; j < node_xh_b + 1; j++) {
+            float bin_x_l = static_cast<float>(j);
+            float overlap_x = overlap(node_xl, node_xh, bin_x_l);
+            for (int k = node_yl_b; k < node_yh_b + 1; k++) {
+                float bin_y_l = static_cast<float>(k);
+                float overlap_y = overlap(node_yl, node_yh, bin_y_l);
+                float overlap_area = overlap_x * overlap_y;
+                density_map[c_id_][j][k] -= (n == 0) ? overlap_area : (-overlap_area);
+            }
+        }
+    }
+    density_gainlist[cell_mov] = -std::numeric_limits<float>::max();
     mov_cell_areas[c_id] -= node_areas[c_id][cell_mov];
     mov_cell_areas[other_c_id] += node_areas[other_c_id][cell_mov];
     // mov_cell_areas[c_id] -= nodes[cell_mov]->sizes[c_id];
@@ -707,8 +887,10 @@ void Partitioner::update_gainWL(pt::PartitionData& db, int cell_mov) {
             int other_c_id = 1 - c_id;
             if (num_node_count[c_id] < 2) {
                 // clear this swap
-                gainlist[node_id] += -nodes[node_id]->gain_map[i];
-                nodes[node_id]->gain_map[i] = 0;
+                if (macro_mask[node_id].item<int>() != 1) {
+                    gainlist[node_id] += -nodes[node_id]->gain_map[i];
+                    nodes[node_id]->gain_map[i] = 0;
+                }
                 continue;
             }
 
@@ -753,9 +935,69 @@ void Partitioner::update_gainWL(pt::PartitionData& db, int cell_mov) {
             float wl = boxs[0] + boxs[1];
             float wl_swap = box_swaps[0] + box_swaps[1];
             float gain = wl - wl_swap;
+            
+            if (macro_mask[node_id].item<int>() != 1) {
+                gainlist[node_id] += gain - nodes[node_id]->gain_map[i];
+                nodes[node_id]->gain_map[i] = gain;
+            }
+        }
+    }
+    
+    auto density_map_a = density_map.accessor<float, 3>();
+    auto mov_node_xl_a = mov_node_xl.accessor<float, 2>();
+    auto mov_node_xh_a = mov_node_xh.accessor<float, 2>();
+    auto mov_node_yl_a = mov_node_yl.accessor<float, 2>();
+    auto mov_node_yh_a = mov_node_yh.accessor<float, 2>();
+    auto mov_node_xl_b_a = mov_node_xl_b.accessor<int, 2>();
+    auto mov_node_xh_b_a = mov_node_xh_b.accessor<int, 2>();
+    auto mov_node_yl_b_a = mov_node_yl_b.accessor<int, 2>();
+    auto mov_node_yh_b_a = mov_node_yh_b.accessor<int, 2>();
+    auto cell_xl_a = cell_xl.accessor<int, 1>();
+    auto cell_xh_a = cell_xh.accessor<int, 1>();
+    auto cell_yl_a = cell_yl.accessor<int, 1>();
+    auto cell_yh_a = cell_yh.accessor<int, 1>();
+    for (int i = 0; i < num_nodes; i++) {
+        int node_id = i;
+        if (macro_mask[node_id].item<int>() != 1 && node_id != cell_mov) {
+            int c_id = db.node_die[node_id];
+            int skip = 0;
+            for (int n = 0; n < 2; n++) {
+                int c_id_ = (n == 0) ? c_id : (1 - c_id);
+                if (((mov_node_xl_b_a[c_id_][node_id] > cell_xh_a[c_id_]) ||
+                     (mov_node_xh_b_a[c_id_][node_id] < cell_xl_a[c_id_])) &&
+                    ((mov_node_yl_b_a[c_id_][node_id] > cell_yh_a[c_id_]) ||
+                     (mov_node_yh_b_a[c_id_][node_id] < cell_yl_a[c_id_]))) {
+                    skip++;
+                }
+            }
+            if (skip == 2) break;
 
-            gainlist[node_id] += gain - nodes[node_id]->gain_map[i];
-            nodes[node_id]->gain_map[i] = gain;
+            float gain_density = 0;
+            for (int n = 0; n < 2; n++) {
+                int c_id_ = (n == 0) ? c_id : (1 - c_id);
+                float node_xl = mov_node_xl_a[c_id_][node_id];
+                float node_xh = mov_node_xh_a[c_id_][node_id];
+                float node_yl = mov_node_yl_a[c_id_][node_id];
+                float node_yh = mov_node_yh_a[c_id_][node_id];
+                int node_xl_b = mov_node_xl_b_a[c_id_][node_id];
+                int node_yl_b = mov_node_yl_b_a[c_id_][node_id];
+                int node_xh_b = mov_node_xh_b_a[c_id_][node_id];
+                int node_yh_b = mov_node_yh_b_a[c_id_][node_id];
+                float current_density = 0;
+
+                for (int j = node_xl_b; j < node_xh_b + 1; j++) {
+                    float bin_x_l = static_cast<float>(j);
+                    float overlap_x = overlap(node_xl, node_xh, bin_x_l);
+                    for (int k = node_yl_b; k < node_yh_b + 1; k++) {
+                        float bin_y_l = static_cast<float>(k);
+                        float overlap_y = overlap(node_yl, node_yh, bin_y_l);
+                        float overlap_area = overlap_x * overlap_y;
+                        current_density += overlap_area * (density_map_a[c_id_][j][k] + ((n == 0) ? 0 : overlap_area));
+                    }
+                }
+                gain_density += (n == 0) ? current_density : (-current_density);
+            }
+            density_gainlist[node_id] = gain_density;
         }
     }
 

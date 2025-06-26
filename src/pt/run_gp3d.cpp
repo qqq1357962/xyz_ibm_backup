@@ -386,7 +386,7 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeDat
                 grad.index({torch::indexing::Slice(data.iopin_mov_lhs, data.iopin_mov_rhs), torch::indexing::Slice(0, 2)}) = 0.0;
             }
             if (!st::setting.skip_2d) {
-                grad.index({torch::indexing::Slice(data.cell_mov_lhs, data.cell_mov_rhs + data.__num_fillers__), torch::indexing::Slice(2, 3)}) = 0.0;
+                grad.index({torch::indexing::Slice(data.cell_mov_lhs, data.cell_mov_rhs), torch::indexing::Slice(2, 3)}) = 0.0;
             }
             // for (auto macro_id : macro_list) {
             //     grad[macro_id][2] = 0;

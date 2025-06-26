@@ -60,6 +60,26 @@ struct Box {
     }
 };
 
+struct Macro_Box {
+    float xl;
+    float yl;
+    float xh;
+    float yh;
+
+    Macro_Box(float xxl, float yyl, float xxh, float yyh) : xl(xxl), yl(yyl), xh(xxh), yh(yyh) {}
+
+    friend ostream& operator<<(ostream& os, const Macro_Box& b) {
+        return os << "(" << b.xl << ", " << b.yl << ") (" << b.xh << ", " << b.yh << ") \n";
+    }
+
+    bool comp(float xxl, float yyl, float xxh, float yyh) {
+        if (((xxl > xl && xxl < xh) || (xxh < xh && xxh > xl)) && ((yyl > yl && yyl < yh) || (yyh < yh && yyh > yl)))
+            return true;
+        else
+            return false;
+    }
+};
+
 class ptNet {
 public:
     int id = -1;
@@ -230,6 +250,14 @@ public:
     int num_nodes;
     int num_nets;
     int num_pins;
+    int num_x_bin;
+    int num_y_bin;
+    float unit_len_x;
+    float unit_len_y;
+    torch::Tensor cell_xl;
+    torch::Tensor cell_xh;
+    torch::Tensor cell_yl;
+    torch::Tensor cell_yh;
     torch::Tensor mov_cell_areas;
     torch::Tensor max_mov_cell_areas;
     torch::Tensor node_die;
@@ -241,6 +269,17 @@ public:
     // vector<bool> freecells;
     torch::Tensor freecells;
     torch::Tensor gainlist;
+    torch::Tensor density_gainlist;
+    torch::Tensor density_map;
+
+    torch::Tensor mov_node_xl;
+    torch::Tensor mov_node_xh;
+    torch::Tensor mov_node_yl;
+    torch::Tensor mov_node_yh;
+    torch::Tensor mov_node_xl_b;
+    torch::Tensor mov_node_yl_b;
+    torch::Tensor mov_node_xh_b;
+    torch::Tensor mov_node_yh_b;
 
     /* bucket list */
     vector<VertexPtr> vertexList;
@@ -288,6 +327,10 @@ public:
     int pop_maxWL();
     bool check_balance_global(int cell_mov_idx);
     void swap_node(pt::PartitionData& db, int cell_mov);
+    float overlap(float x_l, float x_h, float bin_x_l) {
+        // bin_x_h == bin_x_l + 1
+        return std::min(x_h, bin_x_l + 1) - std::max(x_l, bin_x_l);
+    }
 
     shared_ptr<pt::PartitionDataTensor> pt_db_at_ptr;
 
@@ -307,6 +350,7 @@ public:
     torch::Tensor grid_mov_cell_areas;
     torch::Tensor max_grid_mov_cell_areas;
     torch::Tensor upper_lower_bound_ratio;
+    torch::Tensor macro_mask;
 
     /* Hyperedge */
     torch::Tensor pin_id2node_id;

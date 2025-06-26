@@ -156,7 +156,7 @@ bool ParamScheduler::update_best_sol(torch::Tensor sol) {
         update_flag = true;
     }
 
-    if (overflow < stop_overflow && hpwl < best_metric_aux["hpwl"] * 1.005 && overflow <= best_metric_aux["overflow"]) {
+    if (overflow < stop_overflow && hpwl < best_metric_aux["hpwl"] * 1.001 && overflow <= best_metric_aux["overflow"]) {
         if (best_sol_aux.numel() == 0) {
             best_sol_aux = sol.detach().clone();
 
@@ -327,7 +327,7 @@ tuple<torch::Tensor, double, double, int> ParamScheduler::get_best_solution() {
         my_best_iteration = best_metric_aux["iteration"];
         solution_type = 2;
     } else {
-        if (best_metric_aux["hpwl"] < best_metric["hpwl"] * 1.005 &&
+        if (best_metric_aux["hpwl"] < best_metric["hpwl"] * 1.001 &&
             best_metric_aux["overflow"] * 1.1 < best_metric["overflow"]) {
             my_best_sol = best_sol_aux.data();
             my_best_hpwl = best_metric_aux["hpwl"];

@@ -461,6 +461,8 @@ void ViaData::dump(
         // if (bonding_map[i].item<int>() != 0) {
         if (node_die[i + cell_mov_rhs].item<int>() != -1) {
             rawdb->bondings[i].place(via_node_pos[i][0].item<int>(), via_node_pos[i][1].item<int>());
+        } else {
+            rawdb->bondings[i].remove();
         }
     }
 

@@ -526,18 +526,33 @@ void run_placement_main_multi_circuit() {
             // via_data.dump(node_pos, node_size3, data.node_die, cell_mov_lhs, cell_mov_rhs, data.node_orient_top);
         
 
-            for (; st::setting.round_recursion >= 0;) {
+            for (; st::setting.round_recursion > 0;) {
                 /* hpwl-driven fm */
                 if (true) {
                     // node_pos = pt.run_gp3d(data);
                     logger.info("============== HPWL-FM round %d ==============", st::setting.round_recursion);
-                    data.reset();
+                    // data.reset();
+                    data.node_pos = node_pos.slice(0, 0, node_pos_backup.size(0));
+                    data.node_size = data.node_size.slice(0, 0, node_size_backup.size(0));
+                    data.node_size_bot = data.node_size_bot.slice(0, 0, node_size_bot_backup.size(0));
+                    data.node_size_top = data.node_size_top.slice(0, 0, node_size_top_backup.size(0));
+
+                    data.pin_rel_cpos = data.pin_rel_cpos.slice(0, 0, pin_rel_cpos_backup.size(0));
+                    data.pin_rel_cpos_bot = data.pin_rel_cpos_bot.slice(0, 0, pin_rel_cpos_top_backup.size(0));
+                    data.pin_rel_cpos_top = data.pin_rel_cpos_top.slice(0, 0, pin_rel_cpos_bot_backup.size(0));
+
+                    data.node_die = data.node_die.slice(0, 0, node_die_backup.size(0));
+
+                    data.hyperedge_list = hyperedge_list_backup;
+                    data.hyperedge_list_end = hyperedge_list_end_backup;
+                    data.net_mask = net_mask_backup;
+                    data.pin_id2node_id = pin_id2node_id_backup;
                     pt.node_die = node_die.index({Slice(cell_mov_lhs, cell_mov_rhs)}).clone();
                     data.node_die = data.node_die.index({Slice(cell_mov_lhs, cell_mov_rhs)});
                     pt.node_pos_2d_ground = node_pos.index({Slice(cell_mov_lhs, cell_mov_rhs), Slice(0, 2)});
                     data.node_pos = node_pos.index({Slice(cell_mov_lhs, cell_mov_rhs), Slice(0, 2)});
-                    data.node_size =
-                        data.node_size_bot * (1 - pt.node_die).unsqueeze(1) + data.node_size_top * pt.node_die.unsqueeze(1);
+                    data.node_size = data.node_size_bot * (1 - pt.node_die).unsqueeze(1) +
+                                     data.node_size_top * pt.node_die.unsqueeze(1);
 
                     pt.run_fm_wl(data);
                 }
@@ -548,7 +563,6 @@ void run_placement_main_multi_circuit() {
                 node_size_bot = data.node_size_bot * (1 - node_die).unsqueeze(1);
                 node_size_top = data.node_size_top * node_die.unsqueeze(1);  //@@@@@
 
-                st::setting.num_den_layer = (st::setting.round_recursion == 0) ? 3 : 2;
                 via_data = ViaData(data, rawdb, node_die);
                 node_pos = run_gp(data,
                                 via_data,
@@ -560,10 +574,11 @@ void run_placement_main_multi_circuit() {
                                 via_mov_rhs,
                                 mov_lhs,
                                 mov_rhs,
-                                true,
-                                true,
-                                true,
+                                false,
+                                false,
+                                false,
                                 "first");
+                st::setting.round_recursion--;
             }
 
             if (st::setting.rf) {
@@ -640,6 +655,7 @@ void run_placement_main_multi_circuit() {
             hpwl_state.hpwls_lg = hpwl_state.hpwls[hpwl_state.hpwl_idx - 1];
         }
 
+        
         // via_data.dump(node_pos, node_size, data.node_die, cell_mov_lhs, cell_mov_rhs, data.node_orient_top);
         // std::filesystem::path current_dir(std::filesystem::current_path());
         // std::filesystem::path result_dir(st::setting.result_dir);
@@ -1022,6 +1038,8 @@ void run_placement_main_multi_circuit() {
         /* dump to output FIXME: */
         int hpwls_final_ovhd = 0;
         hpwl_state.hpwls_raw = 0;
+        auto node_shift = (data.__die_shift__.index({Slice(0, 2)}) / data.__die_scale__.index({Slice(0, 2)})).expand_as(node_pos);
+        node_pos += node_shift;
         // if (true) {
         if (st::setting.dp) {
             via_data.dump(node_pos, node_size, data.node_die, cell_mov_lhs, cell_mov_rhs, data.node_orient_top);

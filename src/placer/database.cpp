@@ -94,8 +94,7 @@ NodeData::NodeData(Dict& design_info, torch::Device device_) {
     cell_mov_rhs = mov_rhs;
     iopin_mov_lhs = std::get<0>(node_type_indices[3]);
     iopin_mov_rhs = std::get<1>(node_type_indices[3]);
-    for(int i=0;i<mov_rhs;i++)
-    {
+    for (int i = 0; i < mov_rhs; i++) {
         if(macro_mask[i].item<int>()==1)
         {
             macro_list.push_back(i);

@@ -857,7 +857,7 @@ torch::Tensor run_gp(NodeData& data,
         // data.node_pos = torch::empty({0});
     }
 
-    st::setting.round_recursion--;
+    // st::setting.round_recursion--;
     printlog(LOG_WARN, "MEM: cur = %.2f MB, peak = %.2f MB", utils::mem_use::get_current(), utils::mem_use::get_peak());
 
     return node_pos;
