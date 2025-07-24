@@ -66,15 +66,21 @@ struct Macro_Box {
     float xh;
     float yh;
 
-    Macro_Box(float xxl, float yyl, float xxh, float yyh) : xl(xxl), yl(yyl), xh(xxh), yh(yyh) {}
+    int node_die;
+
+    Macro_Box(float xxl, float yyl, float xxh, float yyh, int c_id) : xl(xxl), yl(yyl), xh(xxh), yh(yyh), node_die(c_id) {}
 
     friend ostream& operator<<(ostream& os, const Macro_Box& b) {
         return os << "(" << b.xl << ", " << b.yl << ") (" << b.xh << ", " << b.yh << ") \n";
     }
 
-    bool comp(float xxl, float yyl, float xxh, float yyh) {
-        if (((xxl > xl && xxl < xh) || (xxh < xh && xxh > xl)) && ((yyl > yl && yyl < yh) || (yyh < yh && yyh > yl)))
-            return true;
+    bool comp(float xxl, float yyl, float xxh, float yyh, int other_c_id) {
+        if (other_c_id == node_die) {
+            if (((xxl > xl && xxl < xh) || (xxh < xh && xxh > xl)) && ((yyl > yl && yyl < yh) || (yyh < yh && yyh > yl)))
+                return true;
+            else
+                return false;
+        } 
         else
             return false;
     }
@@ -270,7 +276,15 @@ public:
     torch::Tensor freecells;
     torch::Tensor gainlist;
     torch::Tensor density_gainlist;
+    torch::Tensor swap_gainlist;
+    torch::Tensor swap_node_id;
     torch::Tensor density_map;
+    int swap_cell_num;
+    int swap_c_id;
+    torch::Tensor via_gainlist;
+    vector<vector<int>> bin2node_id;
+    vector<int> surround_bin_id;
+    int maxGAINIndex;
 
     torch::Tensor mov_node_xl;
     torch::Tensor mov_node_xh;

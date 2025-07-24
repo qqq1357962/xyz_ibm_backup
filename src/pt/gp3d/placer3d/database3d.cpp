@@ -611,7 +611,7 @@ tuple<at::Tensor, at::Tensor, at::Tensor> NodeData3D::get_mov_node_info() {
     mov_node_weights[1] = 1 - mov_node_weight;
     node_die = torch::ones({mov_node_pos.size(0)}, dtype(torch::kInt));
     mov_node_pos.index({Slice(iopin_mov_lhs, iopin_mov_rhs)}).copy_(node_pos.index({Slice(iopin_mov_lhs, iopin_mov_rhs)}));
-    if (!st::setting.skip_2d) {
+    if (!st::setting.skip_patoh) {
         mov_node_pos.index({Slice(mov_lhs, mov_rhs), Slice(2, 3)}).copy_(node_pos.index({Slice(mov_lhs, mov_rhs), Slice(2, 3)}));
     }
     mov_node_pos = mov_node_pos.detach();

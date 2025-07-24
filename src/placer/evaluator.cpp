@@ -196,7 +196,7 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> fast_evaluator_multi_circuit(
     torch::Tensor density_maps = torch::zeros({st::setting.num_den_layer, st::setting.num_bin_x, st::setting.num_bin_y},
                                               torch::dtype(mov_node_pos.dtype()).device(mov_node_pos.device()));
     
-    if (st::setting.skip_2d) {
+    if (st::setting.skip_2_5d) {
         auto [overflow_chip, density_map] =
             density_map_layers[2].direct_calc_overflow(mov_node_pos, mov_node_size, init_density_maps[2]);
         overflows[2] = overflow_chip;

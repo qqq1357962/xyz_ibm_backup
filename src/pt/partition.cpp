@@ -998,6 +998,7 @@ void Partitioner::run() {
 //-------------------------------------------------------------------------------
 
 void Partitioner::initList(bool update) {
+    via_gainlist = torch::zeros(num_nodes, dtype(torch::kFloat));
     if (!update) {
         freecells = torch::ones(num_nodes, dtype(torch::kBool));
         // gainlist = torch::zeros(num_nodes, dtype(torch::kInt));
@@ -1031,7 +1032,7 @@ void Partitioner::initList(bool update) {
             FS += (fss == 0);
         }
         cell->gain = FS - TE;
-        // gainlist[cell->id] = cell->gain;
+        via_gainlist[cell->id] = static_cast<float>(cell->gain);
 
         if (std::abs(cell->gain) > maxDegree) {
             cout << "========================== Cell ========================" << endl;
@@ -1078,6 +1079,7 @@ void Partitioner::update_area(shared_ptr<ptNode> cell_mov) {
 void Partitioner::swap(shared_ptr<ptNode> cell, int gain_offset) {
     int gain_index = cell->gain;
     cell->gain += gain_offset;
+    via_gainlist[cell->id] = via_gainlist[cell->id] + static_cast<float>(gain_offset);
     vertexList[cell->id]->gain += gain_offset;
     // gainlist[cell->id] += gain_offset;
     update_vertex(cell->id, gain_index);

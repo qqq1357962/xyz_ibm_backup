@@ -6,15 +6,12 @@ void NodeData::compute_filler() {
         auto [mov_lhs, mov_rhs] = movable_index;
         at::Tensor mov_node_size = node_size.index({Slice(mov_lhs, mov_rhs)});
         at::Tensor die_area = at::prod(die_ur - die_ll);
-        std::cout<<"die_ur: "<<target_density<<" die_ll: "<<die_ll<<std::endl;
-        // std::cout<<"node_size: "<<node_size<<std::endl;
         // init_density_map already multiplies with args.target_density,
         // we need to divide it back
         at::Tensor ori_dmap = (init_density_map / target_density).sum();
         // init_density_map are all normalized to (0.0, 1.0)
         at::Tensor fixed_node_area = ori_dmap * bin_area;
         at::Tensor placeable_area = die_area - fixed_node_area;
-        std::cout<<"die_area: "<<die_area<<" fixed_node_area: "<<fixed_node_area<<std::endl;
         if (true) {
             // Following DREAMPlace
             at::Tensor mov_cell_area = torch::prod(mov_node_size, 1);

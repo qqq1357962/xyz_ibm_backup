@@ -433,9 +433,12 @@ bool Database::writeComponents(ofstream& ofs) {
 string expand_name(const string& name) {
     // add '\' before '[' or ']'
     string result;
-    for (char c : name) {
+    int size = name.size();
+    for (int i = 0; i < size; i++) {
+        char c = name[i];
         if (c == '[' || c == ']') {
-            result.push_back('\\');
+            if (i != 0 && name[i - 1] != '\\')
+                result.push_back('\\');
         }
         result.push_back(c);
     }
@@ -521,9 +524,12 @@ bool Database::writeNets(ofstream& ofs, const std::vector<int> node_selected) {
         if (have_pin) {
             oss << "   - " << expand_name(net->name);
             for (Pin* pin : net->pins) {
-                if (pin->iopin && (pin->iopin->name.substr(0, 3) == "clk" || pin->iopin->name.substr(0, 5) == "clock" || node_selected[pin->iopin->gpdb_id] == 1)) oss << " ( PIN " << pin->type->name() << " )";
+                if (pin->iopin && (pin->iopin->name.substr(0, 3) == "clk" || pin->iopin->name.substr(0, 5) == "clock" || node_selected[pin->iopin->gpdb_id] == 1)) oss << " ( PIN " << expand_name(pin->type->name()) << " )";
                 else if (pin->cell && node_selected[pin->cell->gpdb_id] == 1) oss << " ( " << expand_name(pin->cell->name()) << " " << pin->type->name() << " )";
                 // if (pin->cell && node_selected[pin->cell->gpdb_id] == 1) oss << " ( " << expand_name(pin->cell->name()) << " " << pin->type->name() << " )";
+            }
+            if (bondings[i].valid) {
+                oss << " ( PIN HBT\\[" << i << "\\] )";
             }
             oss << " + USE SIGNAL ;\n";
         }
@@ -671,6 +677,13 @@ bool Database::write_Openroad(const string& inputDef, const string& outputDef, c
                     pin_num++;
                 }
             }
+            vector<int> validBondingIds;
+            for (std::size_t id = 0; id < bondings.size(); id++) {
+                if (bondings[id].valid) {
+                    validBondingIds.emplace_back(id);
+                }
+            }
+            pin_num += validBondingIds.size();
             ofs << "PINS " << pin_num << " ;\n";
             int id = -1;
             while (getline(ifs, line)) {
@@ -681,7 +694,25 @@ bool Database::write_Openroad(const string& inputDef, const string& outputDef, c
                         id++;
                         IOPin* iopin = iopins[id];
                         if (node_selected[iopin->gpdb_id] == 1 || iopin->name.substr(0, 3) == "clk" || iopin->name.substr(0, 5) == "clock") {
-                            ofs << line << endl;
+                            ofs << "\t- " << expand_name(iopin->name) << " + NET " << expand_name(iopin->netName());
+                            switch (iopin->type->direction()) {
+                                case 'f':
+                                    ofs << " + DIRECTION FEEDTHRU + USE SIGNAL";
+                                    break;
+                                case 'i':
+                                    ofs << " + DIRECTION OUTPUT + USE SIGNAL";
+                                    break;
+                                case 'o':
+                                    ofs << " + DIRECTION INPUT + USE SIGNAL";
+                                    break;
+                                case 'x':
+                                    ofs << " + DIRECTION INOUT + USE SIGNAL";
+                                    break;
+                                default:
+                                    logger.error("iopin direction not recognized: %c", iopin->type->direction());
+                                    break;
+                            }
+                            ofs << endl;
                             getline(ifs, line);
                             ofs << line << "+ PORT" << endl;
                             getline(ifs, line);
@@ -695,7 +726,42 @@ bool Database::write_Openroad(const string& inputDef, const string& outputDef, c
                     }
                 }
             }
+            
+            int bonding_id = 0;
+            for (int bondingId : validBondingIds) {
+                auto& bonding = bondings[bondingId];
+                int netId = bonding.netId();
+                string netName = nets[netId]->name;
+                ofs << "\t - HBT\\[" << netId << "\\] + NET " << expand_name(netName) << " + DIRECTION OUTPUT + USE SIGNAL" << std::endl;
+                ofs << "\t\t+ PORT" << endl;
+                ofs << "\t\t  + LAYER PAD ( " << -bondingSizeX / 2 << " " << -bondingSizeY / 2 << " ) ( "
+                    << bondingSizeX / 2 << " " << bondingSizeY / 2 << " )" << endl;
+                ofs << "\t\t  + PLACED ( " << bonding.lx() << " " << bonding.ly() << " ) N ;" << endl;
+            }
             ofs << "END PINS" << endl;
+            int nCells = cells.size();
+            int cell_num = 0;
+            vector<Cell*> macros;
+            for (int i = 0; i < nCells; i++) {
+                Cell* cell = cells[i];
+                if (node_selected[cell->gpdb_id] == 1 && cell->height() > siteH) {
+                    cell_num++;
+                    macros.emplace_back(cell);
+                }
+            }
+            if (cell_num > 0) {
+                ofs << "BLOCKAGES " << cell_num << " ;" << endl;
+                for (auto cell : macros) {
+                    if (cell->orient() == 0 || cell->orient() == 2) {
+                        ofs << "\t" << "- PLACEMENT + SOFT RECT ( " << cell->lx() << " " << cell->ly() << " ) ( "
+                            << cell->hx() << " " << cell->hy() << " ) ;" << endl;
+                    } else {
+                        ofs << "\t" << "- PLACEMENT + SOFT RECT ( " << cell->lx() << " " << cell->ly() << " ) ( "
+                            << cell->lx() + cell->height() << " " << cell->ly() + cell->width() << " ) ;" << endl;
+                    }
+                }
+            }
+            ofs << "END BLOCKAGES" << endl;
             continue;
         }
         while (getline(ifs, line)) {

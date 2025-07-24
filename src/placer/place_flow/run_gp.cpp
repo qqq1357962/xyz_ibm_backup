@@ -303,7 +303,7 @@ torch::Tensor run_gp(NodeData& data,
                     grad[macro_id] = 0;
                 }
             }
-            if (st::setting.skip_2d) {
+            if (st::setting.skip_2_5d) {
                 grad.index({torch::indexing::Slice(data.cell_mov_lhs, data.cell_mov_rhs), torch::indexing::Slice(0, 2)}) = 0.0;
             } else {
                 grad.index({torch::indexing::Slice(data.iopin_mov_lhs, data.iopin_mov_rhs), torch::indexing::Slice(0, 2)}) = 0.0;
@@ -536,7 +536,7 @@ torch::Tensor run_gp(NodeData& data,
         auto [hpwls, overflows, tmp1] = evaluator_fn(mov_node_pos_all);
         // ps.step(hpwls.sum().item<float>(), overflows.index({Slice(0, 2)}).sum().item<float>() / 2, mov_node_pos_all);
         ps.steps(hpwls, overflows, mov_node_pos_all);
-        // if (st::setting.num_den_layer == 3 && !st::setting.skip_2d) {
+        // if (st::setting.num_den_layer == 3 && !st::setting.skip_2_5d) {
         //     if (overflows[2].item<float>() < st::setting.stop_overflow_via) {
         //         st::setting.num_den_layer = 2;
         //     }

@@ -159,6 +159,18 @@ NodeData::NodeData(Dict& design_info, torch::Device device_) {
         numRows[1] = numRows[0];
     }
 
+    __ori_node_size_norm__ = node_size_bot.clone();
+    if (st::setting.utilization < 1) {
+        float magnify = float(1) / st::setting.utilization;
+        auto macro_mask_size = macro_mask.unsqueeze(1).repeat({1, 2});
+        node_size_bot *= sqrt(magnify - (magnify - 1) * macro_mask_size);
+        node_size_bot = torch::cat({node_size_bot.index({Slice(cell_mov_lhs, iopin_mov_lhs), "..."}),
+                            __ori_node_size_norm__.index({Slice(iopin_mov_lhs, None), "..."})},
+                            0);
+        node_size_top = node_size_bot.clone();
+    }
+    
+
     at::Tensor mov_node_size_bot = node_size_bot.index({Slice(mov_lhs, mov_rhs)});
     at::Tensor mov_node_size_top = node_size_top.index({Slice(mov_lhs, mov_rhs)});
     // auto [sorted_tensor, indices] = (torch::prod(mov_node_size_bot, 1)/torch::prod(mov_node_size_top, 1)).sort();
@@ -194,8 +206,11 @@ NodeData::NodeData(Dict& design_info, torch::Device device_) {
     actualUtilM[0] = estimated_target_density_bot;
     actualUtilM[1] = estimated_target_density_top;
     maxUtilM = actualUtilM * (1 + st::setting.die_diff);
-    // st::setting.die_diff = ((1 - actualUtilM[0].item<double>()) - (1 - maxUtilM[0].item<double>()) + (1 - actualUtilM[1].item<double>()) - (1 - maxUtilM[1].item<double>())) / (2 - actualUtilM[0].item<double>() - actualUtilM[1].item<double>());
-    // logger.info("Filler diff: %.3f", st::setting.die_diff);
+    maxUtilM = torch::min(maxUtilM, torch::tensor(1.0));
+    logger.info("Max Utilization: %.3f, %.3f", maxUtilM[0].item<float>(), maxUtilM[1].item<float>());
+    // st::setting.die_diff = ((1 - actualUtilM[0].item<double>()) - (1 - maxUtilM[0].item<double>()) + (1 -
+    // actualUtilM[1].item<double>()) - (1 - maxUtilM[1].item<double>())) / (2 - actualUtilM[0].item<double>() -
+    // actualUtilM[1].item<double>()); logger.info("Filler diff: %.3f", st::setting.die_diff);
 
     upper_lower_bound_ratio = maxUtilM.clone();
     auto area_upper = (node_ratio * maxUtilM[0]) / (mov_node_areas[0] / die_area - maxUtilM[0]);
@@ -730,6 +745,13 @@ void NodeData::postscale_by_site_width() {
     region_boxes *= site_width;
     node_pos *= site_width;
     node_size *= site_width;
+    auto macro_mask_size = macro_mask.unsqueeze(1).repeat({1, 2});
+    __ori_node_size_norm__ = __ori_node_size_norm__ * (1 - macro_mask_size) +
+                             node_size.index({Slice(cell_mov_lhs, cell_mov_rhs), "..."}) * macro_mask_size;
+
+    node_size = torch::cat({__ori_node_size_norm__.index({Slice(cell_mov_lhs, iopin_mov_lhs), "..."}),
+                            node_size.index({Slice(iopin_mov_lhs, None), "..."})},
+                           0);
     pin_rel_cpos *= site_width;
     pin_size *= site_width;
     die_ur *= site_width;
@@ -738,8 +760,18 @@ void NodeData::postscale_by_site_width() {
     core_ll *= site_width;
 
     if (bondingInfo.numel()) bondingInfo *= site_width;
-    if (node_size_bot.numel()) node_size_bot *= site_width;
-    if (node_size_top.numel()) node_size_top *= site_width;
+    if (node_size_bot.numel()) {
+        node_size_bot *= site_width;
+        node_size_bot = torch::cat({__ori_node_size_norm__.index({Slice(cell_mov_lhs, iopin_mov_lhs), "..."}),
+                                    node_size_bot.index({Slice(iopin_mov_lhs, None), "..."})},
+                                   0);
+    }
+    if (node_size_top.numel()) {
+        node_size_top *= site_width;
+        node_size_top = torch::cat({__ori_node_size_norm__.index({Slice(cell_mov_lhs, iopin_mov_lhs), "..."}),
+                                    node_size_top.index({Slice(iopin_mov_lhs, None), "..."})},
+                                   0);
+    }
     if (pin_rel_cpos_bot.numel()) pin_rel_cpos_bot *= site_width;
     if (pin_rel_cpos_top.numel()) pin_rel_cpos_top *= site_width;
     if (pin_size_bot.numel()) pin_size_bot *= site_width;

@@ -76,7 +76,7 @@ ParamScheduler::ParamScheduler(NodeData& data) : recorder(_metrics) {
     max_life = 30;
     life = max_life;
     stop_overflow = st::setting.stop_overflow;
-    if (st::setting.skip_2d) {
+    if (st::setting.skip_2_5d) {
         stop_overflow = st::setting.stop_overflow_via;
     }
 

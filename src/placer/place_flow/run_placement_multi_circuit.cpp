@@ -186,11 +186,11 @@ void run_placement_main_multi_circuit() {
                 data.node_die = pt.node_die.clone();
                 node_die = pt.node_die.clone();
                 // std::tie(sorted_tensor, indices) = tensor.sort();
-                if(st::setting.adjust_macro)
-                {
-                    pt.adjust_macros(data);
-                    node_die = pt.node_die.clone();
-                }
+                // if(st::setting.adjust_macro)
+                // {
+                //     pt.adjust_macros(data);
+                //     node_die = pt.node_die.clone();
+                // }
                 // data.node_die = pt.node_die.clone();
                 if (false) {
                     torch::Tensor node_size_top =
@@ -217,7 +217,7 @@ void run_placement_main_multi_circuit() {
                 }
                 else {
                     auto node_die_check = data.node_die.clone();
-                    if (st::setting.skip_2d) {
+                    if (st::setting.skip_patoh) {
                         if (st::setting.patoh_guide_ratio > 1e-3) {
                             pt.run_patoh_area(data);
                         }
@@ -333,7 +333,6 @@ void run_placement_main_multi_circuit() {
 
         node_size_bot = data.node_size_bot * (1 - node_die).unsqueeze(1);
         node_size_top = data.node_size_top * node_die.unsqueeze(1);
-        st::setting.skip_2d = true;
         // ======================================================================================================
         //
         //                                             MACRO FLOORPLAN
@@ -618,6 +617,10 @@ void run_placement_main_multi_circuit() {
         data.postscale_by_site_width();
         node_pos *= data.site_width;
         node_size *= data.site_width;
+        node_size =
+            torch::cat({data.__ori_node_size_norm__.index({Slice(data.cell_mov_lhs, data.iopin_mov_lhs), "..."}),
+                        node_size.index({Slice(data.iopin_mov_lhs, None), "..."})},
+                       0);
         node_size_bot = data.node_size_bot * (1 - node_die).unsqueeze(1);
         node_size_top = data.node_size_top * node_die.unsqueeze(1);
 

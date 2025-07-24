@@ -18,16 +18,16 @@ argparse::ArgumentParser get_option(int argc, char* argv[]) {
     parser.add_argument("--load_stage").default_value(string("")).help("version");
     parser.add_argument("--load_file").default_value(string("")).help("version");
     parser.add_argument("--load_json").default_value(string("")).help("version");
-    parser.add_argument("--version").default_value(string("22")).help("version");
+    parser.add_argument("--version").default_value(string("23")).help("version");
     parser.add_argument("--fp").default_value(string("false")).help("wherther to use floorplan (true/false)");
-    parser.add_argument("--num_part").default_value(int(50)).help("-num_part").scan<'i', int>();
+    parser.add_argument("--num_part").default_value(int(1)).help("-num_part").scan<'i', int>();
     parser.add_argument("--min_gp_step").default_value(int(800)).help("-min_gp_step").scan<'i', int>();
     parser.add_argument("--min_gp3d_record_step").default_value(int(400)).help("-min_gp_step").scan<'i', int>();
-    parser.add_argument("--is_fp_permit_change_cross_chip").default_value(string("false")).help("true/false");
-    parser.add_argument("--is_move_macro_3d").default_value(string("false")).help("true/false");
-    parser.add_argument("--gp_padding").default_value(double(0.06)).help("gp_padding").scan<'g', double>();
+    parser.add_argument("--is_fp_permit_change_cross_chip").default_value(string("true")).help("true/false");
+    parser.add_argument("--is_move_macro_3d").default_value(string("true")).help("true/false");
+    parser.add_argument("--gp_padding").default_value(double(0.03)).help("gp_padding").scan<'g', double>();
     parser.add_argument("--macro_hpwl_scale").default_value(double(1)).help("gp_padding").scan<'g', double>();
-    parser.add_argument("--adjust_macro").default_value(string("false")).help("true/false");
+    parser.add_argument("--adjust_macro").default_value(string("true")).help("true/false");
     parser.add_argument("--use_greedy_place_in_fp").default_value(string("false")).help("true/false");
     parser.add_argument("--half_filler_height").default_value(string("false")).help("true/false");
     parser.add_argument("--load_def_template").default_value(string("")).help("version");
@@ -40,7 +40,7 @@ argparse::ArgumentParser get_option(int argc, char* argv[]) {
     parser.add_argument("--design_name").default_value(string("adaptec1")).help("design name");
     parser.add_argument("--load_from_raw").default_value(string("true")).help("load from given design");
     parser.add_argument("--gpu").default_value(int(0)).help("gpu id").scan<'i', int>();
-    parser.add_argument("--num_threads").default_value(int(2)).help("#threads").scan<'i', int>();
+    parser.add_argument("--num_threads").default_value(int(8)).help("#threads").scan<'i', int>();
 
     // logging and saver
     parser.add_argument("--log_verbose").default_value(string("true")).help("log to file");
@@ -53,7 +53,7 @@ argparse::ArgumentParser get_option(int argc, char* argv[]) {
     parser.add_argument("--enable_rotate_in_gp").default_value(string("false")).help("enable_rotate_in_gp");
 
     // model params
-    parser.add_argument("--lr").default_value(double(0.01)).help("learning rate").scan<'g', double>();
+    parser.add_argument("--lr").default_value(double(1)).help("learning rate").scan<'g', double>();
     parser.add_argument("--inner_iter").default_value(int(3000)).help("#inner iters").scan<'i', int>();
     parser.add_argument("--inner_iter_gp3d").default_value(int(3000)).help("#inner iters").scan<'i', int>();
     parser.add_argument("--num_bin_x").default_value(int(512)).help("#binX").scan<'i', int>();
@@ -76,16 +76,16 @@ argparse::ArgumentParser get_option(int argc, char* argv[]) {
     parser.add_argument("--sideline").default_value(double(0)).help("").scan<'g', double>();
 
     // params scheduler
-    parser.add_argument("--magic_hpwl").default_value(int(350000)).help("").scan<'i', int>();
+    parser.add_argument("--magic_hpwl").default_value(int(70000)).help("").scan<'i', int>();
     parser.add_argument("--step_precond_coef").default_value(string("true")).help("");
     parser.add_argument("--density_weight").default_value(double(8e-5)).help("the weight of density loss").scan<'g', double>();
     parser.add_argument("--density_weight_coef").default_value(double(1.05)).help("the ratio of density_weight").scan<'g', double>();
-    parser.add_argument("--wa_coeff").default_value(double(4)).help("wa coeff").scan<'g', double>();
+    parser.add_argument("--wa_coeff").default_value(double(2.5)).help("wa coeff").scan<'g', double>();
     parser.add_argument("--stop_overflow").default_value(double(0.07)).help("stop overflow").scan<'g', double>();
     parser.add_argument("--stop_overflow_via").default_value(double(0.01)).help("stop overflow via").scan<'g', double>();
     parser.add_argument("--use_precond").default_value(string("true")).help("apply precond");
     parser.add_argument("--enable_skip_update").default_value(string("true")).help("enable skip update'");
-    parser.add_argument("--quad_penalty").default_value(string("false")).help("quadratic penalty to accelerate gp");
+    parser.add_argument("--quad_penalty").default_value(string("true")).help("quadratic penalty to accelerate gp");
     parser.add_argument("--quad_coeff").default_value(double(2000)).help("quad penalty").scan<'g', double>();
     parser.add_argument("--early_stop_check_plateau").default_value(string("true")).help("check plateau");
 
@@ -93,7 +93,7 @@ argparse::ArgumentParser get_option(int argc, char* argv[]) {
     parser.add_argument("--gp").default_value(string("true")).help("global placement");
 
     // partition params
-    parser.add_argument("--partitioner").default_value(string("gp2d_grid")).help("1.fm; 2.patoh");
+    parser.add_argument("--partitioner").default_value(string("gp3d")).help("1.fm; 2.patoh");
     parser.add_argument("--num_cuts").default_value(int(-1)).help("#cuts required").scan<'i', int>();
     parser.add_argument("--num_folds").default_value(double(2)).help("# folds in slicing").scan<'g', double>();
     parser.add_argument("--num_grids").default_value(double(2)).help("# grids in slicing").scan<'g', double>();
@@ -113,7 +113,7 @@ argparse::ArgumentParser get_option(int argc, char* argv[]) {
     parser.add_argument("--eval_params").default_value(string("false")).help("");
     parser.add_argument("--lg").default_value(string("true")).help("legalization");
     parser.add_argument("--dp").default_value(string("true")).help("detailed placement");
-    parser.add_argument("--pp").default_value(string("true")).help("post process");
+    parser.add_argument("--pp").default_value(string("false")).help("post process");
     parser.add_argument("--rf").default_value(string("false")).help("gp refinments");
     parser.add_argument("--sw").default_value(string("false")).help("gp swap");
     parser.add_argument("--via_dp").default_value(string("true")).help("via lg/dp");
@@ -131,12 +131,12 @@ argparse::ArgumentParser get_option(int argc, char* argv[]) {
     parser.add_argument("--cut_net_thres").default_value(int(2)).help("thres for wa_z weight").scan<'i', int>();
     parser.add_argument("--net_weight_offset").default_value(double(0)).help("wa_z weight offset").scan<'g', double>();
     parser.add_argument("--net_weight_coef").default_value(double(1)).help("wa_z weight").scan<'g', double>();
-    parser.add_argument("--num_den_layer").default_value(int(3)).help("#deensity layer in gp").scan<'i', int>();
-    parser.add_argument("--use_pre_gp").default_value(string("false")).help("whether load previous sol");
+    parser.add_argument("--num_den_layer").default_value(int(3)).help("#density layer in gp").scan<'i', int>();
+    parser.add_argument("--use_pre_gp").default_value(string("true")).help("whether load previous sol");
     parser.add_argument("--use_pre_pt").default_value(string("false")).help("whether load previous pt");
     parser.add_argument("--shrink_size").default_value(double(1)).help("shrink coef in 3d GP").scan<'g', double>();
     parser.add_argument("--match_2pin_nets").default_value(string("false")).help("stack 2-pin nets");
-    parser.add_argument("--force_coeff_2d").default_value(double(0)).help("force_coeff in x/y").scan<'g', double>();
+    parser.add_argument("--force_coeff_2d").default_value(double(1)).help("force_coeff in x/y").scan<'g', double>();
     parser.add_argument("--wa_coeff_wa_z").default_value(double(1)).help("wa grad in z").scan<'g', double>();
     parser.add_argument("--wa_coeff_wa_xy").default_value(double(1)).help("wa grad in xy").scan<'g', double>();
     parser.add_argument("--correlate_bbox").default_value(string("false")).help("");
@@ -150,13 +150,13 @@ argparse::ArgumentParser get_option(int argc, char* argv[]) {
     parser.add_argument("--weaken_net_wa_coef").default_value(double(0.1)).help("").scan<'g', double>();
     parser.add_argument("--net_weight_type").default_value(string("step")).help("");
     parser.add_argument("--filler_type").default_value(string("center")).help("");
-    parser.add_argument("--kernel_size").default_value(int(2)).help("Gaussian kernel size").scan<'i', int>();
+    parser.add_argument("--kernel_size").default_value(int(1)).help("Gaussian kernel size").scan<'i', int>();
     parser.add_argument("--num_bin_3d").default_value(int(1)).help("").scan<'i', int>();
     parser.add_argument("--visualize_curve").default_value(string("false")).help("");
     parser.add_argument("--fmwl_iter").default_value(int(1)).help("").scan<'i', int>();
     parser.add_argument("--fmwl_area_coef").default_value(double(10)).help("").scan<'g', double>();
     parser.add_argument("--local_density_weight").default_value(string("false")).help("");
-    parser.add_argument("--stack_cells").default_value(int(-1)).help("").scan<'i', int>();
+    parser.add_argument("--stack_cells").default_value(int(1)).help("").scan<'i', int>();
     parser.add_argument("--skip_gp3d").default_value(string("false")).help("");
     parser.add_argument("--skip_hpwl_fm").default_value(string("false")).help("");
     parser.add_argument("--skip_draw").default_value(string("false")).help("");
@@ -172,13 +172,16 @@ argparse::ArgumentParser get_option(int argc, char* argv[]) {
     parser.add_argument("--rotate_type").default_value(string("direct")).help("Loss Type");
     parser.add_argument("--rotate_thre").default_value(double(0.30)).help("Rotate Threshold").scan<'g', double>();
     parser.add_argument("--rotate_coef").default_value(int(1000)).help("Rotate Threshold").scan<'i', int>();
-    parser.add_argument("--skip_2d").default_value(string("false")).help("skip 2d placer");
+    parser.add_argument("--skip_2_5d").default_value(string("true")).help("skip 2.5d placer");
+    parser.add_argument("--skip_patoh").default_value(string("true")).help("skip 2d placer");
+    parser.add_argument("--utilization").default_value(double(1)).help("Utilization in area").scan<'g', double>();
+    parser.add_argument("--fm_cut_size").default_value(string("false")).help("Use FM optimize cut size");
 
 
 
     // others
     parser.add_argument("--draw_mat_size").default_value(double(1)).help("all use").scan<'g', double>();
-    parser.add_argument("--omni_int").default_value(int(0)).help("all use'").scan<'i', int>();
+    parser.add_argument("--omni_int").default_value(int(1)).help("all use'").scan<'i', int>();
     parser.add_argument("--omni_float").default_value(double(1)).help("all use").scan<'g', double>();
     parser.add_argument("--transfer_txt").default_value(string("false")).help("transfer txt");
 

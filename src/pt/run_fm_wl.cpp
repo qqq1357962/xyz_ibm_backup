@@ -16,34 +16,86 @@ void Partitioner::run_fm_wl(NodeData& data, bool skip) {
     // node_die = data.node_die;
 
     vector<Macro_Box> Macro_Boxs;
+    vector<Macro_Box> Small_Macro_Boxs;
+    float shrink_ratio = 0.25;
     auto node_pos_a = node_pos.accessor<float, 2>();
     auto node_size_a = node_size.accessor<float, 2>();
     auto macro_mask_a = macro_mask.accessor<float, 1>();
     auto non_zero_indices = torch::nonzero(macro_mask);
     auto non_zero_num = macro_mask.sum().item<int>();
+    auto node_die_a = node_die.accessor<int, 1>();
     for (int i = 0; i < non_zero_num; i++) {
+        int c_id = node_die_a[non_zero_indices[i].item<int>()];
         Macro_Boxs.emplace_back(
             node_pos_a[non_zero_indices[i].item<int>()][0] - node_size_a[non_zero_indices[i].item<int>()][0] / 2,
             node_pos_a[non_zero_indices[i].item<int>()][1] - node_size_a[non_zero_indices[i].item<int>()][1] / 2,
             node_pos_a[non_zero_indices[i].item<int>()][0] + node_size_a[non_zero_indices[i].item<int>()][0] / 2,
-            node_pos_a[non_zero_indices[i].item<int>()][1] + node_size_a[non_zero_indices[i].item<int>()][1] / 2);
+            node_pos_a[non_zero_indices[i].item<int>()][1] + node_size_a[non_zero_indices[i].item<int>()][1] / 2, 
+            c_id);
+
+        float shrink_size =
+            min(node_size_a[non_zero_indices[i].item<int>()][0], node_size_a[non_zero_indices[i].item<int>()][1]) *
+            shrink_ratio;
+        Small_Macro_Boxs.emplace_back(node_pos_a[non_zero_indices[i].item<int>()][0] -
+                                          (node_size_a[non_zero_indices[i].item<int>()][0] - shrink_size) / 2,
+                                      node_pos_a[non_zero_indices[i].item<int>()][1] -
+                                          (node_size_a[non_zero_indices[i].item<int>()][1] - shrink_size) / 2,
+                                      node_pos_a[non_zero_indices[i].item<int>()][0] +
+                                          (node_size_a[non_zero_indices[i].item<int>()][0] - shrink_size) / 2,
+                                      node_pos_a[non_zero_indices[i].item<int>()][1] +
+                                          (node_size_a[non_zero_indices[i].item<int>()][1] - shrink_size) / 2,
+                                      c_id);
+
+    }
+
+    mov_cell_areas = torch::zeros(2, torch::dtype(torch::kLong));
+    for (int i = 0; i < num_nodes; ++i) {
+        int c_id = node_die[i].item<int>();
+        nodes[i]->group = c_id;
+        mov_cell_areas[c_id] += nodes[i]->sizes[c_id];
     }
 
     for (int i = 0; i < num_nodes; ++i) {
         if (macro_mask_a[i] != 1) {
+            int c_id = node_die_a[i];
+            int other_c_id = 1 - c_id;
+            bool self_overlap = false;
+            bool oppo_overlap = false;
             for (auto j : Macro_Boxs) {
                 bool inside_macro = j.comp(node_pos_a[i][0] - node_size_a[i][0] / 2,
                                            node_pos_a[i][1] - node_size_a[i][1] / 2,
                                            node_pos_a[i][0] + node_size_a[i][0] / 2,
-                                           node_pos_a[i][1] + node_size_a[i][1] / 2);
+                                           node_pos_a[i][1] + node_size_a[i][1] / 2,
+                                           other_c_id);
                 if (inside_macro) {
                     macro_mask_a[i] = 1;
+                    oppo_overlap = true;
                     break;
+                }
+            }
+            if (!st::setting.fm_cut_size) {
+                for (auto j : Small_Macro_Boxs) {
+                    bool inside_macro = j.comp(node_pos_a[i][0] - node_size_a[i][0] / 2,
+                                            node_pos_a[i][1] - node_size_a[i][1] / 2,
+                                            node_pos_a[i][0] + node_size_a[i][0] / 2,
+                                            node_pos_a[i][1] + node_size_a[i][1] / 2,
+                                            c_id);
+                    if (inside_macro) {
+                        // macro_mask_a[i] = 1;
+                        self_overlap = true;
+                        break;
+                    }
+                }
+                if (self_overlap && !oppo_overlap) {
+                    node_die[i] = 1 - node_die[i];
+                    data.node_die[i] = 1 - data.node_die[i];
+                    nodes[i]->group = other_c_id;
+                    mov_cell_areas[c_id] -= nodes[i]->sizes[c_id];
+                    mov_cell_areas[other_c_id] += nodes[i]->sizes[other_c_id];
                 }
             }
         }
     }
-
 
     /* updata pin rel pos */
     for (int i = 0; i < num_pins; ++i) {
@@ -53,13 +105,6 @@ void Partitioner::run_fm_wl(NodeData& data, bool skip) {
         } else {
             data.pin_rel_cpos[i] = data.pin_rel_cpos_top[i];
         }
-    }
-
-    mov_cell_areas = torch::zeros(2, torch::dtype(torch::kLong));
-    for (int i = 0; i < num_nodes; ++i) {
-        int c_id = node_die[i].item<int>();
-        nodes[i]->group = c_id;
-        mov_cell_areas[c_id] += nodes[i]->sizes[c_id];
     }
 
     pt::PartitionDataTensor pt_db_at(data, node_pos, node_size);
@@ -131,6 +176,7 @@ void Partitioner::run_fm_wl(NodeData& data, bool skip) {
                     hpwls[iteration + 1],
                     (1.0 - hpwls[iteration + 1] / (double)hpwls[0]) * 100);
 
+        logger.info("%d cells change their layer", maxGAINIndex + 1);
         if (GAIN_dif < 1E3) break;
     }
     rpt_cut_size();
@@ -320,8 +366,9 @@ void Partitioner::initWLGain(pt::PartitionData& db, bool update) {
     mov_node_yl_b = torch::zeros({2, num_nodes}, dtype(torch::kInt));
     mov_node_xh_b = torch::zeros({2, num_nodes}, dtype(torch::kInt));
     mov_node_yh_b = torch::zeros({2, num_nodes}, dtype(torch::kInt));
-    num_x_bin = 512;
-    num_y_bin = 512;
+    num_x_bin = st::setting.num_bin_x;
+    num_y_bin = st::setting.num_bin_y;
+    bin2node_id.resize(num_x_bin * num_y_bin);
     float min_xl = std::numeric_limits<float>::max();
     float max_xh = -std::numeric_limits<float>::max();
     float min_yl = std::numeric_limits<float>::max();
@@ -535,6 +582,10 @@ void Partitioner::initWLGain(pt::PartitionData& db, bool update) {
                         float overlap_y = overlap(node_yl, node_yh, bin_y_l);
                         float overlap_area = overlap_x * overlap_y;
                         current_density += overlap_area * (density_map_a[c_id_][j][k] + ((n == 0) ? 0 : overlap_area));
+                        if (bin2node_id[j * num_y_bin + k].size() == 0 ||
+                            bin2node_id[j * num_y_bin + k].back() != node_id) {
+                            bin2node_id[j * num_y_bin + k].emplace_back(node_id);
+                        }
                     }
                 }
                 gain_density += (n == 0) ? current_density : (-current_density);
@@ -549,8 +600,8 @@ void Partitioner::initWLGain(pt::PartitionData& db, bool update) {
 void Partitioner::passWL(pt::PartitionData& db) {
     int num_free = num_nodes;
     float GAIN_ITER = 0, GAIN_MAX = 0;
-    int maxGAINIndex = -1;
-    int num_swaps = num_nodes / 50;
+    maxGAINIndex = -1;
+    int num_swaps = num_nodes / 20;
 
     float progress = 0.0;
     vector<float> hpwls(num_swaps + 1);
@@ -591,8 +642,11 @@ void Partitioner::passWL(pt::PartitionData& db) {
                                .item<float>()},
                           torch::dtype(torch::kFloat)));
         // cout << node_cost_area << endl;
-        auto cost_list = gainlist.clone() + density_gainlist.clone();
-        auto cost_list_ = cost_list.clone();
+        // auto weight = gainlist.max() / density_gainlist.max() / 2;
+        auto cost_list = gainlist.clone() + density_gainlist.clone() * 10;
+        if (st::setting.fm_cut_size) {
+            cost_list = via_gainlist.clone() + density_gainlist.clone() / 10;
+        }
         // cost_list *= node_cost_area.index_select(0, pt_db_at_ptr->node_die);
 
         // int cell_mov_idx = torch::argmax(gainlist, 0).item<int>();
@@ -606,7 +660,7 @@ void Partitioner::passWL(pt::PartitionData& db) {
 
         // cout << gainlist.max().item<float>() / density_gainlist.max().item<float>() << endl;
 
-        float gain = cost_list_[cell_mov_idx].item<float>();
+        float gain = cost_list[cell_mov_idx].item<float>();
         if (macro_mask[cell_mov_idx].item<int>() == 1) {
             cout << gain << endl;
         }
@@ -770,9 +824,11 @@ int Partitioner::pop_maxWL() {
 
 void Partitioner::swap_node(pt::PartitionData& db, int cell_mov) {
     int c_id = db.node_die[cell_mov];
+    swap_c_id = 1 - c_id;
     int other_c_id = 1 - c_id;
     db.node_die[cell_mov] = other_c_id;
     gainlist[cell_mov] = -std::numeric_limits<float>::max();
+    vector<int>().swap(surround_bin_id);
     for (int node2pin_id = db.flat_node2pin_start_map[cell_mov]; node2pin_id < db.flat_node2pin_start_map[cell_mov + 1];
          ++node2pin_id) {
         int node_pin_id = db.flat_node2pin_map[node2pin_id];
@@ -799,6 +855,8 @@ void Partitioner::swap_node(pt::PartitionData& db, int cell_mov) {
         cell_xh[c_id_] = node_xh_b;
         cell_yh[c_id_] = node_yh_b;
 
+        // cout << "swap node: " << node_xl_b << " " << node_xh_b << " " << node_yl_b << " " << node_yh_b << endl;
+
         for (int j = node_xl_b; j < node_xh_b + 1; j++) {
             float bin_x_l = static_cast<float>(j);
             float overlap_x = overlap(node_xl, node_xh, bin_x_l);
@@ -807,6 +865,11 @@ void Partitioner::swap_node(pt::PartitionData& db, int cell_mov) {
                 float overlap_y = overlap(node_yl, node_yh, bin_y_l);
                 float overlap_area = overlap_x * overlap_y;
                 density_map[c_id_][j][k] -= (n == 0) ? overlap_area : (-overlap_area);
+                if (surround_bin_id.size() == 0 ||
+                    std::find(surround_bin_id.begin(), surround_bin_id.end(), j * num_y_bin + k) ==
+                        surround_bin_id.end()) {
+                    surround_bin_id.emplace_back(j * num_y_bin + k);
+                }
             }
         }
     }
@@ -956,48 +1019,45 @@ void Partitioner::update_gainWL(pt::PartitionData& db, int cell_mov) {
     auto cell_xh_a = cell_xh.accessor<int, 1>();
     auto cell_yl_a = cell_yl.accessor<int, 1>();
     auto cell_yh_a = cell_yh.accessor<int, 1>();
-    for (int i = 0; i < num_nodes; i++) {
-        int node_id = i;
-        if (macro_mask[node_id].item<int>() != 1 && node_id != cell_mov) {
-            int c_id = db.node_die[node_id];
-            int skip = 0;
-            for (int n = 0; n < 2; n++) {
-                int c_id_ = (n == 0) ? c_id : (1 - c_id);
-                if (((mov_node_xl_b_a[c_id_][node_id] > cell_xh_a[c_id_]) ||
-                     (mov_node_xh_b_a[c_id_][node_id] < cell_xl_a[c_id_])) &&
-                    ((mov_node_yl_b_a[c_id_][node_id] > cell_yh_a[c_id_]) ||
-                     (mov_node_yh_b_a[c_id_][node_id] < cell_yl_a[c_id_]))) {
-                    skip++;
-                }
-            }
-            if (skip == 2) break;
 
-            float gain_density = 0;
-            for (int n = 0; n < 2; n++) {
-                int c_id_ = (n == 0) ? c_id : (1 - c_id);
-                float node_xl = mov_node_xl_a[c_id_][node_id];
-                float node_xh = mov_node_xh_a[c_id_][node_id];
-                float node_yl = mov_node_yl_a[c_id_][node_id];
-                float node_yh = mov_node_yh_a[c_id_][node_id];
-                int node_xl_b = mov_node_xl_b_a[c_id_][node_id];
-                int node_yl_b = mov_node_yl_b_a[c_id_][node_id];
-                int node_xh_b = mov_node_xh_b_a[c_id_][node_id];
-                int node_yh_b = mov_node_yh_b_a[c_id_][node_id];
-                float current_density = 0;
+    auto has_not_updated = torch::ones(num_nodes, dtype(torch::kInt));
+    for (auto i : surround_bin_id) {
+        for (auto m : bin2node_id[i]) {
+            if (has_not_updated[m].item<int>() == 1) {
+                int node_id = m;
+                has_not_updated[node_id] = 0;
+                if (freecells[node_id].item<int>() == 0) continue;
+                
+                int c_id = db.node_die[node_id];
+                float gain_density = 0;
+                for (int n = 0; n < 2; n++) {
+                    int c_id_ = (n == 0) ? c_id : (1 - c_id);
+                    float node_xl = mov_node_xl_a[c_id_][node_id];
+                    float node_xh = mov_node_xh_a[c_id_][node_id];
+                    float node_yl = mov_node_yl_a[c_id_][node_id];
+                    float node_yh = mov_node_yh_a[c_id_][node_id];
+                    int node_xl_b = mov_node_xl_b_a[c_id_][node_id];
+                    int node_yl_b = mov_node_yl_b_a[c_id_][node_id];
+                    int node_xh_b = mov_node_xh_b_a[c_id_][node_id];
+                    int node_yh_b = mov_node_yh_b_a[c_id_][node_id];
+                    float current_density = 0;
 
-                for (int j = node_xl_b; j < node_xh_b + 1; j++) {
-                    float bin_x_l = static_cast<float>(j);
-                    float overlap_x = overlap(node_xl, node_xh, bin_x_l);
-                    for (int k = node_yl_b; k < node_yh_b + 1; k++) {
-                        float bin_y_l = static_cast<float>(k);
-                        float overlap_y = overlap(node_yl, node_yh, bin_y_l);
-                        float overlap_area = overlap_x * overlap_y;
-                        current_density += overlap_area * (density_map_a[c_id_][j][k] + ((n == 0) ? 0 : overlap_area));
+                    // cout << "surround node: " << node_xl_b << " " << node_xh_b << " " << node_yl_b << " " << node_yh_b << endl;
+
+                    for (int j = node_xl_b; j < node_xh_b + 1; j++) {
+                        float bin_x_l = static_cast<float>(j);
+                        float overlap_x = overlap(node_xl, node_xh, bin_x_l);
+                        for (int k = node_yl_b; k < node_yh_b + 1; k++) {
+                            float bin_y_l = static_cast<float>(k);
+                            float overlap_y = overlap(node_yl, node_yh, bin_y_l);
+                            float overlap_area = overlap_x * overlap_y;
+                            current_density += overlap_area * (density_map_a[c_id_][j][k] + ((n == 0) ? 0 : overlap_area));
+                        }
                     }
+                    gain_density += (n == 0) ? current_density : (-current_density);
                 }
-                gain_density += (n == 0) ? current_density : (-current_density);
+                density_gainlist[node_id] = gain_density;
             }
-            density_gainlist[node_id] = gain_density;
         }
     }
 

@@ -521,7 +521,7 @@ bool Database::writeOpenroad_vias(const string& file) {
     }
     // write files
     fs << "NumTerminals " << validBondingIds.size() << std::endl;
-    fs << "Terminal size " << static_cast<float>(bondingSizeX) / 10 << " " << static_cast<float>(bondingSizeY) / 10 << std::endl;
+    fs << "Terminal size " << bondingSizeX << " " << bondingSizeY << std::endl;
     for (int bondingId : validBondingIds) {
         auto& bonding = bondings[bondingId];
         int netId = bonding.netId();

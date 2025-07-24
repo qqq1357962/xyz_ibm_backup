@@ -243,7 +243,7 @@ tuple<torch::Tensor, torch::Tensor> calc_obj_and_grad_multi_circuit(
 
     /* 3 density layers: cell | cell | via */
     // for (int i = 0; i < 2; i++) {  // TODO:
-    if (st::setting.skip_2d) {
+    if (st::setting.skip_2_5d) {
         torch::Tensor node_weight = data.mov_node_weights[2];
         auto den_val_list =
             density_map_layers[2].forward(mov_node_pos, mov_node_size, init_density_maps[2], node_weight, false);

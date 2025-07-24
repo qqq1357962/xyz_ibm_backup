@@ -65,6 +65,7 @@ void Partitioner::renewVertex(shared_ptr<ptNode> cell) {
 
 void Partitioner::rmVertex(int& cell, int& gain_index) {
     int group = nodes[cell]->group;
+    via_gainlist[cell] = -std::numeric_limits<float>::max();
     VertexPtr vertex = vertexList[cell];
 
     // remove

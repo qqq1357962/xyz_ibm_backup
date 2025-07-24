@@ -5,7 +5,7 @@
 
 torch::Tensor Partitioner::run_gp2d_grid(NodeData &data) {
     st::setting.cache_macro_mask = data.macro_mask.to(data.device);
-    logger.info("============= Running GP2D ============");
+    logger.info("============= Skip GP2D ============");
 
     // ======================================================================================================
     //
@@ -54,236 +54,239 @@ torch::Tensor Partitioner::run_gp2d_grid(NodeData &data) {
 
     torch::Tensor init_density_map = get_init_density_map(data);
     data.init_shape_params(mov_node_size);
-    if (st::setting.pt_model == "null") { /* disable fillers to smoothen the distribution */
-        /* trunc nodes to core */
-        torch::Tensor node_pos_lb = mov_node_size / 2 + data.mov_node_sideline_ll + 1e-4;
-        torch::Tensor node_pos_ub = data.mov_node_sideline_ur - mov_node_size / 2 + data.die_ll - 1e-4;
-        // torch::Tensor node_pos_lb = mov_node_size / 2 + data.die_ll + 1e-4;
-        // torch::Tensor node_pos_ub = data.die_ur - mov_node_size / 2 + data.die_ll - 1e-4;
-        std::function<torch::Tensor(torch::Tensor)> trunc_node_pos_fn = [&node_pos_lb, &node_pos_ub](torch::Tensor x) {
-            x.data().clamp_(node_pos_lb, node_pos_ub);
-            return x;
-        };
 
-        /* overflow function */
-        std::function<torch::Tensor(torch::Tensor)> overflow_fn = [&data](torch::Tensor mov_density_map) {
-            torch::Tensor overflow_sum = ((mov_density_map - data.target_density) * data.bin_area).clamp_(0.0).sum();
-            return overflow_sum / data.__total_mov_area_without_filler__;
-        };
-        auto overflow_helper = make_tuple(mov_lhs, mov_rhs, overflow_fn);
-
-        /* parameteer scheduler */
-        ParamScheduler ps = ParamScheduler(data);
-        auto density_map_layer = ElectronicDensityLayer(data.unit_len, data.num_bin_x, data.num_bin_y, data.device,
-                                                        overflow_helper, expand_ratio, data.sorted_maps, data.macro_mask);
-
-        /* objective function */
-        /* follow the order of node types */
-        /* | MovConnected | MovFloat | ConnFixed ... | */
-        torch::Tensor conn_fix_node_pos = data.node_pos.new_empty({0, 2});
-        if (get<0>(data.fixed_connected_index) < get<1>(data.fixed_connected_index)) {
-            auto [lhs, rhs] = data.fixed_connected_index;
-            conn_fix_node_pos = data.node_pos.index({Slice(lhs, rhs), "..."});
-        }
-        conn_fix_node_pos = conn_fix_node_pos.detach();
-        std::function<std::tuple<torch::Tensor, torch::Tensor>(torch::Tensor)> obj_and_grad_fn =
-            [&trunc_node_pos_fn, &mov_node_size, &init_density_map, &density_map_layer, &conn_fix_node_pos, &ps,
-             &data](at::Tensor mov_node_pos) {
-                auto [loss, grad] = calc_obj_and_grad(mov_node_pos, trunc_node_pos_fn, mov_node_size, init_density_map,
-                                         density_map_layer, conn_fix_node_pos, ps, data);
-                if (true) {
-                    grad.index({torch::indexing::Slice(data.iopin_mov_lhs, data.iopin_mov_rhs), torch::indexing::Slice(0, 2)}) = 0.0;
-                }
-                return std::make_tuple(loss, grad);
-            };
-
-        /* evaluation function */
-        std::function<tuple<torch::Tensor, torch::Tensor>(torch::Tensor)> evaluator_fn =
-            [&trunc_node_pos_fn, &mov_node_size, &init_density_map, &density_map_layer, &conn_fix_node_pos, &ps,
-             &data](at::Tensor mov_node_pos) {
-                return fast_evaluator(mov_node_pos, trunc_node_pos_fn, mov_node_size, init_density_map,
-                                      density_map_layer, conn_fix_node_pos, ps, data);
-            };
-
-        // data.mov_node_weight = torch::ones({2}, dtype(torch::kFloat)).to(device);
-        // data.mov_node_weight[1] = -1;
-        // cout << mov_node_size << endl;
-
-        /* Nesterov optimizer */
-        auto optimizer = torch::optim::Nesterov({mov_node_pos}, torch::optim::NesterovOptions(0.0), obj_and_grad_fn);
-        init_params(mov_node_pos, trunc_node_pos_fn, mov_lhs, mov_rhs, conn_fix_node_pos, density_map_layer,
-                    mov_node_size, init_density_map, optimizer, ps, data);
-
-        auto pos_ret = mov_node_pos.clone();
-
-        /* learning rate */
-        double init_lr =
-            estimate_initial_learning_rate(obj_and_grad_fn, trunc_node_pos_fn, mov_node_pos, st::setting.lr);
-        logger.info("Init learning rate %.3E", init_lr);
-        for (auto &group : optimizer.param_groups()) {
-            auto &options = static_cast<torch::optim::NesterovOptions &>(group.options());
-            options.set_lr(init_lr);
-        }
-
-        if (st::setting.skip_2d) {
-            data.to(torch::kCPU);
-            return mov_node_pos.index({Slice(mov_lhs, mov_rhs)}).to(torch::kCPU);
-        }
-
-        // data.mov_node_weight[1] = -1;
-        // cout << mov_node_size << endl;
-        // auto den_val_list = density_map_layer.forward(mov_node_pos, mov_node_size, init_density_map, data.mov_node_weight);
-        // exit(1);
-
-        /* start gp iteration */
-        printlog(LOG_WARN, "MEM: cur = %.2f MB, peak = %.2f MB", utils::mem_use::get_current(),
-                 utils::mem_use::get_peak());
-        logger.info("=========================================");
-        logger.info("start gp");
-        int &iteration = st::setting.iteration;
-        iteration = 0;  // FIXME: 0 ? 1
-        for (iteration = 0; iteration < 0; iteration++) {
-            torch::Tensor obj = optimizer.step();
-            // auto new_orient = data.node_orient_top.clone().contiguous();
-            if(st::setting.enable_rotate_in_gp)
-            {
-                data.updata_shape_by_density_grad(st::setting.cache_density_grad_4part, mov_node_size, iteration);
-                // data.update_macro_orientaion_by_pin_std(mov_node_pos);
-            }
-            auto [hpwl, overflow] = evaluator_fn(mov_node_pos);
-            ps.step(hpwl.item().toFloat(), overflow.item().toFloat(), mov_node_pos);
-            if (iteration % st::setting.log_freq == 0 || iteration == st::setting.inner_iter - 1 ||
-                (iteration >= st::setting.minGPStep && ps.need_to_early_stop()) ) {
-                logger.info(
-                    "iter: %d | masked_hpwl: %.2E overflow: %.4f obj: %.4E "
-                    "density_weight: %.4E wa_coeff: %.4E",
-                    iteration, hpwl.item().toFloat(), overflow.item().toFloat(), obj.item().toFloat(),
-                    ps.density_weight, ps.wa_coeff);
-                // for(int ii = 0;ii<data.macro_shape_ratio.size();ii++)
-                // {
-                //     cout<<data.macro_shape_ratio[ii]<<endl;
-                // }
-                if (st::setting.draw_placement) {
-                    auto info = make_tuple(st::setting.round_recursion, iteration, data.design_name + "_2D_GP");
-                    draw_fig_with_cairo_cpp(mov_node_pos.index({Slice(mov_lhs, mov_rhs)}).to(torch::kCPU),
-                                            mov_node_size.index({Slice(mov_lhs, mov_rhs)}).to(torch::kCPU), 
-                                            data, info);
-                    info = make_tuple(0, 0, data.design_name + "_2D_GP2");
-                    int debuggg=0;
-                    // draw_fig_with_cairo_cpp2(tensor1, tensor2, data, info, 0, 10);    
-                }
-            }
-
-
-            if (iteration >= st::setting.minGPStep && ps.need_to_early_stop()) {
-                break;
-            }
-        }
-
-        /* retrieve best score and evaluate without filler */
-        auto [best_sol, best_hpwl, best_overflow, best_iteration] = ps.get_best_solution();
-        if (best_iteration > -1) {
-            logger.info("GP Stop! #Iters %d masked_hpwl: %.4E overflow: %.4f", iteration, best_hpwl, best_overflow);
-        } else {
-            logger.info("GP Stop! cannot find best solution");
-        }
-        if (best_sol.numel() != 0) {
-            mov_node_pos.data().copy_(best_sol);
-        }
-
-        node_pos = mov_node_pos.index({Slice(mov_lhs, mov_rhs)}).to(torch::kCPU);
-        if (false) {
-            mov_node_size.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs)}) *= 1;
-            mov_node_size.index({Slice(data.cell_mov_rhs)}) *= 0.1;
-            auto info = make_tuple(0, 0, data.design_name + "_2D_GP");
-            auto tensor1 = mov_node_pos.index({Slice(mov_lhs, mov_rhs)}).to(torch::kCPU);
-            auto tensor2 = mov_node_size.index({Slice(mov_lhs, mov_rhs)}).to(torch::kCPU);
-            draw_fig_with_cairo_cpp(tensor1, tensor2, data, info);
-            info = make_tuple(0, 0, data.design_name + "_2D_GP2");
-            int debuggg=0;
-            draw_fig_with_cairo_cpp2(tensor1, tensor2, data, info, 0, 10);
-            // info = make_tuple(0, 0, data.design_name + "_2D_GP3");
-            // draw_fig_with_cairo_cpp2(tensor1, tensor2, data, info, 2792, 3);
-            // info = make_tuple(0, 0, data.design_name + "_2D_GP4");
-            // draw_fig_with_cairo_cpp2(tensor1, tensor2, data, info, 2792, 3);
-            // info = make_tuple(0, 0, data.design_name + "_2D_GP5");
-            // draw_fig_with_cairo_cpp2(tensor1, tensor2, data, info, 2792, 5);
-            // info = make_tuple(0, 0, data.design_name + "_2D_GP6");
-            // draw_fig_with_cairo_cpp2(tensor1, tensor2, data, info, 2792, 6);
-        }
-
-        auto [hpwl, overflow] = evaluate_placement(mov_node_pos, density_map_layer, init_density_map, data);
-        logger.info("After GP, best solution eval, exact HPWL: %.4E exact Overflow: %.4f itertation: %d", hpwl.item().toFloat(),
-                    overflow.item().toFloat(), best_iteration);
-        // hpwl_state.hpwls[hpwl_state.hpwl_idx++] = hpwl.item<int>(); // FIXME:
-        
-        // /* save to .pt model */
-        // if (st::setting.save_model) {
-        //     std::filesystem::path current_dir(std::filesystem::current_path());
-        //     std::filesystem::path result_dir(st::setting.result_dir);
-        //     std::filesystem::path exp_id(st::setting.exp_id);
-        //     std::filesystem::path res_root = current_dir / result_dir / exp_id;
-        //     std::string model_dir = res_root.string() + "/gp_pt.pt";
-        //     logger.info("Save gp2d to %s", model_dir.c_str());
-        //     torch::save(node_pos, model_dir);
-        // }
-
-        if (st::setting.eval_params) {
-
-#define EXTRACT(x, a, b, c)         \
-  do                                \
-  {                                 \
-    std::string xs((#x));           \
-    std::size_t pos = xs.find("."); \
-    xs = xs.substr(pos + 1);        \
-    a += (xs + c);                  \
-    std::stringstream ss;           \
-    ss << (x);                      \
-    std::string o;                  \
-    ss >> (o);                      \
-    b += (o + c);                   \
-  } while (false)
-
-            /* dump to csv */
-            ifstream infile;
-            infile.open("./script_outputs/gp_params_output_log.csv");
-            bool is_empty = infile.peek() == std::ifstream::traits_type::eof();
-
-            ofstream outfile;
-            outfile.open("./script_outputs/gp_params_output_log.csv", std::ios_base::app);
-
-            int hpwl_v = hpwl.item<int>();
-            float overflow_v = overflow.item<float>();
-
-            string tag = "";
-            string value = "";
-            string quote = ",";
-            string newline = "\n";
-            EXTRACT(st::setting.design_name, tag, value, quote);
-            EXTRACT(st::setting.quad_penalty, tag, value, quote);
-            EXTRACT(st::setting.quad_coeff, tag, value, quote);
-            EXTRACT(st::setting.wa_coeff, tag, value, quote);
-            EXTRACT(st::setting.density_weight, tag, value, quote);
-            EXTRACT(st::setting.density_weight_coef, tag, value, quote);
-            EXTRACT(st::setting.magic_hpwl, tag, value, quote);
-            EXTRACT(hpwl_v, tag, value, quote);
-            EXTRACT(overflow_v, tag, value, newline);
-
-            cout << tag << endl;
-            cout << value << endl;
-
-            if (is_empty) {
-                outfile << tag;
-            }
-            outfile << value;
-            outfile.close();
-
-            exit(1);
-        }
-    } else {
-        logger.info("Loading model from %s", st::setting.pt_model.c_str());
-        torch::load(node_pos, st::setting.pt_model);
+    if (st::setting.skip_patoh) {
+        data.to(torch::kCPU);
+        return mov_node_pos.index({Slice(mov_lhs, mov_rhs)}).to(torch::kCPU);
     }
+
+//     if (st::setting.pt_model == "null") { /* disable fillers to smoothen the distribution */
+//         /* trunc nodes to core */
+//         torch::Tensor node_pos_lb = mov_node_size / 2 + data.mov_node_sideline_ll + 1e-4;
+//         torch::Tensor node_pos_ub = data.mov_node_sideline_ur - mov_node_size / 2 + data.die_ll - 1e-4;
+//         // torch::Tensor node_pos_lb = mov_node_size / 2 + data.die_ll + 1e-4;
+//         // torch::Tensor node_pos_ub = data.die_ur - mov_node_size / 2 + data.die_ll - 1e-4;
+//         std::function<torch::Tensor(torch::Tensor)> trunc_node_pos_fn = [&node_pos_lb, &node_pos_ub](torch::Tensor x) {
+//             x.data().clamp_(node_pos_lb, node_pos_ub);
+//             return x;
+//         };
+
+//         /* overflow function */
+//         std::function<torch::Tensor(torch::Tensor)> overflow_fn = [&data](torch::Tensor mov_density_map) {
+//             torch::Tensor overflow_sum = ((mov_density_map - data.target_density) * data.bin_area).clamp_(0.0).sum();
+//             return overflow_sum / data.__total_mov_area_without_filler__;
+//         };
+//         auto overflow_helper = make_tuple(mov_lhs, mov_rhs, overflow_fn);
+
+//         /* parameteer scheduler */
+//         ParamScheduler ps = ParamScheduler(data);
+//         auto density_map_layer = ElectronicDensityLayer(data.unit_len, data.num_bin_x, data.num_bin_y, data.device,
+//                                                         overflow_helper, expand_ratio, data.sorted_maps, data.macro_mask);
+
+//         /* objective function */
+//         /* follow the order of node types */
+//         /* | MovConnected | MovFloat | ConnFixed ... | */
+//         torch::Tensor conn_fix_node_pos = data.node_pos.new_empty({0, 2});
+//         if (get<0>(data.fixed_connected_index) < get<1>(data.fixed_connected_index)) {
+//             auto [lhs, rhs] = data.fixed_connected_index;
+//             conn_fix_node_pos = data.node_pos.index({Slice(lhs, rhs), "..."});
+//         }
+//         conn_fix_node_pos = conn_fix_node_pos.detach();
+//         std::function<std::tuple<torch::Tensor, torch::Tensor>(torch::Tensor)> obj_and_grad_fn =
+//             [&trunc_node_pos_fn, &mov_node_size, &init_density_map, &density_map_layer, &conn_fix_node_pos, &ps,
+//              &data](at::Tensor mov_node_pos) {
+//                 auto [loss, grad] = calc_obj_and_grad(mov_node_pos, trunc_node_pos_fn, mov_node_size, init_density_map,
+//                                          density_map_layer, conn_fix_node_pos, ps, data);
+//                 if (true) {
+//                     grad.index({torch::indexing::Slice(data.iopin_mov_lhs, data.iopin_mov_rhs), torch::indexing::Slice(0, 2)}) = 0.0;
+//                 }
+//                 return std::make_tuple(loss, grad);
+//             };
+
+//         /* evaluation function */
+//         std::function<tuple<torch::Tensor, torch::Tensor>(torch::Tensor)> evaluator_fn =
+//             [&trunc_node_pos_fn, &mov_node_size, &init_density_map, &density_map_layer, &conn_fix_node_pos, &ps,
+//              &data](at::Tensor mov_node_pos) {
+//                 return fast_evaluator(mov_node_pos, trunc_node_pos_fn, mov_node_size, init_density_map,
+//                                       density_map_layer, conn_fix_node_pos, ps, data);
+//             };
+
+//         // data.mov_node_weight = torch::ones({2}, dtype(torch::kFloat)).to(device);
+//         // data.mov_node_weight[1] = -1;
+//         // cout << mov_node_size << endl;
+
+//         /* Nesterov optimizer */
+//         auto optimizer = torch::optim::Nesterov({mov_node_pos}, torch::optim::NesterovOptions(0.0), obj_and_grad_fn);
+//         init_params(mov_node_pos, trunc_node_pos_fn, mov_lhs, mov_rhs, conn_fix_node_pos, density_map_layer,
+//                     mov_node_size, init_density_map, optimizer, ps, data);
+
+//         auto pos_ret = mov_node_pos.clone();
+
+//         /* learning rate */
+//         double init_lr =
+//             estimate_initial_learning_rate(obj_and_grad_fn, trunc_node_pos_fn, mov_node_pos, st::setting.lr);
+//         logger.info("Init learning rate %.3E", init_lr);
+//         for (auto &group : optimizer.param_groups()) {
+//             auto &options = static_cast<torch::optim::NesterovOptions &>(group.options());
+//             options.set_lr(init_lr);
+//         }
+
+        
+
+//         // data.mov_node_weight[1] = -1;
+//         // cout << mov_node_size << endl;
+//         // auto den_val_list = density_map_layer.forward(mov_node_pos, mov_node_size, init_density_map, data.mov_node_weight);
+//         // exit(1);
+
+//         /* start gp iteration */
+//         printlog(LOG_WARN, "MEM: cur = %.2f MB, peak = %.2f MB", utils::mem_use::get_current(),
+//                  utils::mem_use::get_peak());
+//         logger.info("=========================================");
+//         logger.info("start gp");
+//         int &iteration = st::setting.iteration;
+//         iteration = 0;  // FIXME: 0 ? 1
+//         for (iteration = 0; iteration < 0; iteration++) {
+//             torch::Tensor obj = optimizer.step();
+//             // auto new_orient = data.node_orient_top.clone().contiguous();
+//             if(st::setting.enable_rotate_in_gp)
+//             {
+//                 data.updata_shape_by_density_grad(st::setting.cache_density_grad_4part, mov_node_size, iteration);
+//                 // data.update_macro_orientaion_by_pin_std(mov_node_pos);
+//             }
+//             auto [hpwl, overflow] = evaluator_fn(mov_node_pos);
+//             ps.step(hpwl.item().toFloat(), overflow.item().toFloat(), mov_node_pos);
+//             if (iteration % st::setting.log_freq == 0 || iteration == st::setting.inner_iter - 1 ||
+//                 (iteration >= st::setting.minGPStep && ps.need_to_early_stop()) ) {
+//                 logger.info(
+//                     "iter: %d | masked_hpwl: %.2E overflow: %.4f obj: %.4E "
+//                     "density_weight: %.4E wa_coeff: %.4E",
+//                     iteration, hpwl.item().toFloat(), overflow.item().toFloat(), obj.item().toFloat(),
+//                     ps.density_weight, ps.wa_coeff);
+//                 // for(int ii = 0;ii<data.macro_shape_ratio.size();ii++)
+//                 // {
+//                 //     cout<<data.macro_shape_ratio[ii]<<endl;
+//                 // }
+//                 if (st::setting.draw_placement) {
+//                     auto info = make_tuple(st::setting.round_recursion, iteration, data.design_name + "_2D_GP");
+//                     draw_fig_with_cairo_cpp(mov_node_pos.index({Slice(mov_lhs, mov_rhs)}).to(torch::kCPU),
+//                                             mov_node_size.index({Slice(mov_lhs, mov_rhs)}).to(torch::kCPU), 
+//                                             data, info);
+//                     info = make_tuple(0, 0, data.design_name + "_2D_GP2");
+//                     int debuggg=0;
+//                     // draw_fig_with_cairo_cpp2(tensor1, tensor2, data, info, 0, 10);    
+//                 }
+//             }
+
+
+//             if (iteration >= st::setting.minGPStep && ps.need_to_early_stop()) {
+//                 break;
+//             }
+//         }
+
+//         /* retrieve best score and evaluate without filler */
+//         auto [best_sol, best_hpwl, best_overflow, best_iteration] = ps.get_best_solution();
+//         if (best_iteration > -1) {
+//             logger.info("GP Stop! #Iters %d masked_hpwl: %.4E overflow: %.4f", iteration, best_hpwl, best_overflow);
+//         } else {
+//             logger.info("GP Stop! cannot find best solution");
+//         }
+//         if (best_sol.numel() != 0) {
+//             mov_node_pos.data().copy_(best_sol);
+//         }
+
+//         node_pos = mov_node_pos.index({Slice(mov_lhs, mov_rhs)}).to(torch::kCPU);
+//         if (false) {
+//             mov_node_size.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs)}) *= 1;
+//             mov_node_size.index({Slice(data.cell_mov_rhs)}) *= 0.1;
+//             auto info = make_tuple(0, 0, data.design_name + "_2D_GP");
+//             auto tensor1 = mov_node_pos.index({Slice(mov_lhs, mov_rhs)}).to(torch::kCPU);
+//             auto tensor2 = mov_node_size.index({Slice(mov_lhs, mov_rhs)}).to(torch::kCPU);
+//             draw_fig_with_cairo_cpp(tensor1, tensor2, data, info);
+//             info = make_tuple(0, 0, data.design_name + "_2D_GP2");
+//             int debuggg=0;
+//             draw_fig_with_cairo_cpp2(tensor1, tensor2, data, info, 0, 10);
+//             // info = make_tuple(0, 0, data.design_name + "_2D_GP3");
+//             // draw_fig_with_cairo_cpp2(tensor1, tensor2, data, info, 2792, 3);
+//             // info = make_tuple(0, 0, data.design_name + "_2D_GP4");
+//             // draw_fig_with_cairo_cpp2(tensor1, tensor2, data, info, 2792, 3);
+//             // info = make_tuple(0, 0, data.design_name + "_2D_GP5");
+//             // draw_fig_with_cairo_cpp2(tensor1, tensor2, data, info, 2792, 5);
+//             // info = make_tuple(0, 0, data.design_name + "_2D_GP6");
+//             // draw_fig_with_cairo_cpp2(tensor1, tensor2, data, info, 2792, 6);
+//         }
+
+//         auto [hpwl, overflow] = evaluate_placement(mov_node_pos, density_map_layer, init_density_map, data);
+//         logger.info("After GP, best solution eval, exact HPWL: %.4E exact Overflow: %.4f itertation: %d", hpwl.item().toFloat(),
+//                     overflow.item().toFloat(), best_iteration);
+//         // hpwl_state.hpwls[hpwl_state.hpwl_idx++] = hpwl.item<int>(); // FIXME:
+        
+//         // /* save to .pt model */
+//         // if (st::setting.save_model) {
+//         //     std::filesystem::path current_dir(std::filesystem::current_path());
+//         //     std::filesystem::path result_dir(st::setting.result_dir);
+//         //     std::filesystem::path exp_id(st::setting.exp_id);
+//         //     std::filesystem::path res_root = current_dir / result_dir / exp_id;
+//         //     std::string model_dir = res_root.string() + "/gp_pt.pt";
+//         //     logger.info("Save gp2d to %s", model_dir.c_str());
+//         //     torch::save(node_pos, model_dir);
+//         // }
+
+//         if (st::setting.eval_params) {
+
+// #define EXTRACT(x, a, b, c)         \
+//   do                                \
+//   {                                 \
+//     std::string xs((#x));           \
+//     std::size_t pos = xs.find("."); \
+//     xs = xs.substr(pos + 1);        \
+//     a += (xs + c);                  \
+//     std::stringstream ss;           \
+//     ss << (x);                      \
+//     std::string o;                  \
+//     ss >> (o);                      \
+//     b += (o + c);                   \
+//   } while (false)
+
+//             /* dump to csv */
+//             ifstream infile;
+//             infile.open("./script_outputs/gp_params_output_log.csv");
+//             bool is_empty = infile.peek() == std::ifstream::traits_type::eof();
+
+//             ofstream outfile;
+//             outfile.open("./script_outputs/gp_params_output_log.csv", std::ios_base::app);
+
+//             int hpwl_v = hpwl.item<int>();
+//             float overflow_v = overflow.item<float>();
+
+//             string tag = "";
+//             string value = "";
+//             string quote = ",";
+//             string newline = "\n";
+//             EXTRACT(st::setting.design_name, tag, value, quote);
+//             EXTRACT(st::setting.quad_penalty, tag, value, quote);
+//             EXTRACT(st::setting.quad_coeff, tag, value, quote);
+//             EXTRACT(st::setting.wa_coeff, tag, value, quote);
+//             EXTRACT(st::setting.density_weight, tag, value, quote);
+//             EXTRACT(st::setting.density_weight_coef, tag, value, quote);
+//             EXTRACT(st::setting.magic_hpwl, tag, value, quote);
+//             EXTRACT(hpwl_v, tag, value, quote);
+//             EXTRACT(overflow_v, tag, value, newline);
+
+//             cout << tag << endl;
+//             cout << value << endl;
+
+//             if (is_empty) {
+//                 outfile << tag;
+//             }
+//             outfile << value;
+//             outfile.close();
+
+//             exit(1);
+//         }
+//     } else {
+//         logger.info("Loading model from %s", st::setting.pt_model.c_str());
+//         torch::load(node_pos, st::setting.pt_model);
+//     }
 
     data.to(torch::kCPU);
     // data.reset();  // FIXME:
@@ -292,100 +295,6 @@ torch::Tensor Partitioner::run_gp2d_grid(NodeData &data) {
     // run_patoh(data, true);
     // run_patoh(data, false);
     run_patoh_area(data);
-    // if (st::setting.partitioner == "gp3d" || st::setting.partitioner == "fm_wl") return node_pos.to(torch::kCPU);
-
-    // if (st::setting.partitioner == "fm") {
-    //     run();
-    // } else if (st::setting.partitioner == "gp2d_sub_grid")
-    //     run_patoh_sub_grid(data, node_pos.to(torch::kCPU));
-    // else {
-    //     if (st::setting.mononlithic) {
-    //         run_patoh_mononlithic(data, node_pos.to(torch::kCPU));
-    //     } else {
-    //         run_patoh_grided(data, node_pos.to(torch::kCPU));
-    //     }
-    // }
-
-    /* validate max-utilization constraints */
-    // mov_cell_areas = torch::zeros(2, torch::dtype(torch::kLong));
-    // for (int i = 0; i < num_nodes; i++) {
-    //     int group = node_die[i].item<int>();
-    //     if (st::setting.clamp_util) {
-    //         if ((mov_cell_areas[group] + nodes[i]->sizes[group] > max_mov_cell_areas[group]).item<bool>())
-    //             group = !group;
-    //     }
-    //     mov_cell_areas[group] += nodes[i]->sizes[group];
-    //     nodes[i]->group = group;
-    //     node_die[i] = group;
-    // }
-
-    // // node_pos[0][0] = 10;
-    // // node_pos[0][1] = 8;
-    // // node_die[0] = 0;
-
-    // // node_pos[1][0] = 10;
-    // // node_pos[1][1] = 8;
-    // // node_die[1] = 1;
-
-    // // node_pos[2][0] = 20;
-    // // node_pos[2][1] = 8;
-    // // node_die[2] = 0;
-    
-    // // node_pos[3][0] = 20;
-    // // node_pos[3][1] = 8;
-    // // node_die[3] = 1;
-
-    // // node_pos[4][0] = 10;
-    // // node_pos[4][1] = 22;
-    // // node_die[4] = 0;
-
-    // // node_pos[5][0] = 10;
-    // // node_pos[5][1] = 22;
-    // // node_die[5] = 1;
-
-    // // node_pos[6][0] = 20;
-    // // node_pos[6][1] = 22;
-    // // node_die[6] = 0;
-
-    // // node_pos[7][0] = 20;
-    // // node_pos[7][1] = 22;
-    // // node_die[7] = 1;
-
-
-    // /* evaluate partition result */
-    // auto [hpwl1, hpwl2, hpwl_ovlp] = evaluate_wl_cross_chip(node_pos.to(device), node_die.to(device), data);
-    // logger.info("After partition, solution eval, exact HPWL [bot + top = total/extra]: [%d + %d = %d/%d]",
-    //             hpwl1.item<int>(), hpwl2.item<int>(), (hpwl1 + hpwl2).item<int>(), hpwl_ovlp.item<int>());
-    // data.node_die = node_die.clone();  // TODO: construct data from pt
-    // data.mov_cell_areas = mov_cell_areas.clone();
-
-    // logger.info("============ Legalized partition result ============");
-    // rpt_cut_size();
-    // logger.info("#Cells for each chip (%d, %d)", (1 - node_die).sum().item<int>(), node_die.sum().item<int>());
-    // logger.info("Areas for each chip (%ld, %ld)", (mov_cell_areas[0]).item<long>(), (mov_cell_areas[1]).item<long>());
-    // logger.info("Utils for each chip (%.2f, %.2f)", (mov_cell_areas[0] / max_mov_cell_areas[0]).item<double>(),
-    //             (mov_cell_areas[1] / max_mov_cell_areas[1]).item<double>());
-
-    // /* visualize partition */
-    // if (true) {
-    //     torch::Tensor node_size_bot = torch::zeros({mov_rhs - mov_lhs, 2}, torch::dtype(node_pos.dtype()));
-    //     torch::Tensor node_size_top = torch::zeros({mov_rhs - mov_lhs, 2}, torch::dtype(node_pos.dtype()));
-    //     for (int i = 0; i != mov_rhs - mov_lhs; i++) {
-    //         if (node_die[i].item<int>() == 0) {
-    //             node_size_bot[i] = data.node_size_bot[i];
-    //         } else {
-    //             node_size_top[i] = data.node_size_top[i];
-    //         }
-    //     }
-    //     auto info1 = make_tuple(st::setting.round_recursion, 0, data.design_name + "_2D_PT_0");
-    //     draw_fig_with_cairo_cpp(node_pos, node_size_bot, data, info1);
-    //     auto info2 = make_tuple(st::setting.round_recursion, 0, data.design_name + "_2D_PT_1");
-    //     draw_fig_with_cairo_cpp(node_pos, node_size_top, data, info2);
-    //     auto info3 = make_tuple(st::setting.round_recursion, 0, data.design_name + "_2D_PT_2");
-    //     auto node_pos_draw_cp = torch::cat({node_pos, node_pos}, 0);
-    //     auto node_size_draw_cp = torch::cat({node_size_bot, node_size_top}, 0);
-    //     draw_fig_with_cairo_cpp_cross_chip(node_pos_draw_cp, node_size_draw_cp, data, info3);
-    // }
 
     return node_pos;
 }
