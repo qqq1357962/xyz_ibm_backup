@@ -128,6 +128,8 @@ public:
     torch::Tensor __ori_node_orient_bot__;
     torch::Tensor __ori_node_orient_top__;
 
+    torch::Tensor __ori_node_size_norm_bot__;
+    torch::Tensor __ori_node_size_norm_top__;
     torch::Tensor __ori_node_size_norm__;
 
     /* site info */

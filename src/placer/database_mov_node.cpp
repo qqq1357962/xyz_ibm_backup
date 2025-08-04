@@ -175,9 +175,8 @@ tuple<at::Tensor, at::Tensor, at::Tensor> NodeData::get_mov_node_info_cross_chip
             node_size_exact.index({"...", 0})
                 .index({mov_node_xsize_order.index({Slice(int(num_nodes * 0.05), int(num_nodes * 0.95))})}));
         at::Tensor filler_size_y = rowHeights[i];
-        if((filler_size_y>filler_size_x).item<int>()==1)
-        {
-            filler_size_x=filler_size_y;
+        if ((filler_size_y > filler_size_x).item<int>() == 1) {
+            filler_size_x = filler_size_y.clone();
         }
 
         at::Tensor total_filler_area =
@@ -186,6 +185,15 @@ tuple<at::Tensor, at::Tensor, at::Tensor> NodeData::get_mov_node_info_cross_chip
             at::tensor({filler_size_x.item<float>(), filler_size_y.item<float>()}, torch::dtype(mov_node_size.dtype()));
         num_fillers_cc[i] =
             torch::round(total_filler_area / (filler_size_x * filler_size_y)).item<int>();  // FIXME: round ? floor
+        if (num_fillers_cc[i] > 1e6) {
+            logger.warning("Too many fillers: %d, set to 1000000", num_fillers_cc[i]);
+            int scaler = static_cast<int>(ceil(sqrt(static_cast<double>(num_fillers_cc[i]) / 1000000.0)));
+            filler_size_x *= scaler;
+            filler_size_y *= scaler;
+            single_filler_size = at::tensor({filler_size_x.item<float>(), filler_size_y.item<float>()},
+                                            torch::dtype(mov_node_size.dtype()));
+            num_fillers_cc[i] = torch::round(total_filler_area / (filler_size_x * filler_size_y)).item<int>();
+        }
         filler_sizes[i] = single_filler_size.repeat({num_fillers_cc[i], 1});
         mov_node_sideline_ll = torch::cat({mov_node_sideline_ll, 
                                         (single_sideline_ll).repeat({num_fillers_cc[i], 1})}, 0);

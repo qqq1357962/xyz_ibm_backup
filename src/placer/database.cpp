@@ -160,16 +160,25 @@ NodeData::NodeData(Dict& design_info, torch::Device device_) {
     }
 
     __ori_node_size_norm__ = node_size_bot.clone();
+    __ori_node_size_norm_bot__ = node_size_bot.clone();
+    __ori_node_size_norm_top__ = node_size_top.clone();
+    float magnify = float(1) / st::setting.utilization;
+    auto macro_mask_size = macro_mask.unsqueeze(1).repeat({1, 2});
     if (st::setting.utilization < 1) {
-        float magnify = float(1) / st::setting.utilization;
-        auto macro_mask_size = macro_mask.unsqueeze(1).repeat({1, 2});
         node_size_bot *= sqrt(magnify - (magnify - 1) * macro_mask_size);
-        node_size_bot = torch::cat({node_size_bot.index({Slice(cell_mov_lhs, iopin_mov_lhs), "..."}),
-                            __ori_node_size_norm__.index({Slice(iopin_mov_lhs, None), "..."})},
-                            0);
-        node_size_top = node_size_bot.clone();
+        node_size_top *= sqrt(magnify - (magnify - 1) * macro_mask_size);
     }
-    
+
+    if (st::setting.macro_padding > 0) {
+        node_size_bot += macro_mask_size * site_height * st::setting.macro_padding;
+        node_size_top += macro_mask_size * site_height * st::setting.macro_padding;
+    }
+    node_size_bot = torch::cat({node_size_bot.index({Slice(cell_mov_lhs, iopin_mov_lhs), "..."}),
+                                __ori_node_size_norm_bot__.index({Slice(iopin_mov_lhs, None), "..."})},
+                               0);
+    node_size_top = torch::cat({node_size_top.index({Slice(cell_mov_lhs, iopin_mov_lhs), "..."}),
+                                __ori_node_size_norm_top__.index({Slice(iopin_mov_lhs, None), "..."})},
+                               0);
 
     at::Tensor mov_node_size_bot = node_size_bot.index({Slice(mov_lhs, mov_rhs)});
     at::Tensor mov_node_size_top = node_size_top.index({Slice(mov_lhs, mov_rhs)});
@@ -746,8 +755,12 @@ void NodeData::postscale_by_site_width() {
     node_pos *= site_width;
     node_size *= site_width;
     auto macro_mask_size = macro_mask.unsqueeze(1).repeat({1, 2});
-    __ori_node_size_norm__ = __ori_node_size_norm__ * (1 - macro_mask_size) +
-                             node_size.index({Slice(cell_mov_lhs, cell_mov_rhs), "..."}) * macro_mask_size;
+    auto node_die_size = node_die.index({Slice(cell_mov_lhs, cell_mov_rhs)}).unsqueeze(1).repeat({1, 2});
+    __ori_node_size_norm__ = __ori_node_size_norm_bot__ * (1 - node_die_size) + __ori_node_size_norm_top__ * node_die_size;
+    __ori_node_size_norm__ =
+        __ori_node_size_norm__ * (1 - macro_mask_size) +
+        (node_size.index({Slice(cell_mov_lhs, cell_mov_rhs), "..."}) - site_height * st::setting.macro_padding) *
+            macro_mask_size;
 
     node_size = torch::cat({__ori_node_size_norm__.index({Slice(cell_mov_lhs, iopin_mov_lhs), "..."}),
                             node_size.index({Slice(iopin_mov_lhs, None), "..."})},
@@ -762,13 +775,21 @@ void NodeData::postscale_by_site_width() {
     if (bondingInfo.numel()) bondingInfo *= site_width;
     if (node_size_bot.numel()) {
         node_size_bot *= site_width;
-        node_size_bot = torch::cat({__ori_node_size_norm__.index({Slice(cell_mov_lhs, iopin_mov_lhs), "..."}),
+        __ori_node_size_norm_bot__ = __ori_node_size_norm_bot__ * (1 - macro_mask_size) +
+                                     (node_size_bot.index({Slice(cell_mov_lhs, cell_mov_rhs), "..."}) -
+                                      site_height * st::setting.macro_padding) *
+                                         macro_mask_size;
+        node_size_bot = torch::cat({__ori_node_size_norm_bot__.index({Slice(cell_mov_lhs, iopin_mov_lhs), "..."}),
                                     node_size_bot.index({Slice(iopin_mov_lhs, None), "..."})},
                                    0);
     }
     if (node_size_top.numel()) {
         node_size_top *= site_width;
-        node_size_top = torch::cat({__ori_node_size_norm__.index({Slice(cell_mov_lhs, iopin_mov_lhs), "..."}),
+        __ori_node_size_norm_top__ = __ori_node_size_norm_top__ * (1 - macro_mask_size) +
+                                     (node_size_top.index({Slice(cell_mov_lhs, cell_mov_rhs), "..."}) -
+                                      site_height * st::setting.macro_padding) *
+                                         macro_mask_size;
+        node_size_top = torch::cat({__ori_node_size_norm_top__.index({Slice(cell_mov_lhs, iopin_mov_lhs), "..."}),
                                     node_size_top.index({Slice(iopin_mov_lhs, None), "..."})},
                                    0);
     }

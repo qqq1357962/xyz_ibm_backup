@@ -569,7 +569,9 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeDat
         // }
         // cout << endl;
         auto [hpwl, overflows, mov_density_map] = evaluator_fn(mov_node_pos);
-        overflows = overflow_overall.clone();
+        if (rotate_90) {
+            overflows = overflow_overall.clone();
+        }
 
         hpwl.index({"...", 2}) *= data.net_weight * ps.net_weight_coef;
         float step_wl = hpwl.sum().item<float>();

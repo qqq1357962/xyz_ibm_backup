@@ -191,14 +191,24 @@ void init_params_multi_circuit(torch::Tensor mov_node_pos,
 
 
     /* 3 density layers: cell | cell | via */
-    for (int i = 0; i < st::setting.num_den_layer; i++) {
-        torch::Tensor node_weight = data.mov_node_weights[i];
-        auto den_val_list = density_map_layers[i].forward(mov_node_pos, mov_node_size, init_density_maps[i], node_weight);
-        den_losses[i] = den_val_list[0];
-        overflow += den_val_list[1] / 3;
+    if (st::setting.skip_2_5d) {
+        torch::Tensor node_weight = data.mov_node_weights[2];
+        auto den_val_list =
+            density_map_layers[2].forward(mov_node_pos, mov_node_size, init_density_maps[2], node_weight);
+        den_loss = den_val_list[0];
+        overflow += den_val_list[1];
+    } else {
+        for (int i = 0; i < st::setting.num_den_layer; i++) {  // TODO:
+            torch::Tensor node_weight = data.mov_node_weights[i];
+            auto den_val_list =
+                density_map_layers[i].forward(mov_node_pos, mov_node_size, init_density_maps[i], node_weight);
+            den_losses[i] = den_val_list[0];
+            overflow += den_val_list[1] / 3;
+        }
+        den_loss = st::setting.num_den_layer == 3 ? (den_losses[0] + den_losses[1] + den_losses[2])
+                                                  : (den_losses[0] + den_losses[1]);
     }
-    den_loss = st::setting.num_den_layer == 3 ? (den_losses[0] + den_losses[1] + den_losses[2])
-                                              : (den_losses[0] + den_losses[1]);
+
     auto [wl_grad, density_grad] = calc_grad(optimizer, mov_node_pos, wl_loss, den_loss);
     double init_density_weight = (wl_grad.norm(1) / density_grad.norm(1)).detach().item<double>();
 

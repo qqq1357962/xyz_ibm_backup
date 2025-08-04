@@ -185,6 +185,7 @@ void Setting::parse(argparse::ArgumentParser args) {
     filler_type = args.get<std::string>("filler_type");
     kernel_size = args.get<int>("--kernel_size");
     num_bin_3d = args.get<int>("--num_bin_3d");
+    num_bin_3d_y = args.get<int>("--num_bin_3d_y");
     visualize_curve = str2bool(args.get<std::string>("--visualize_curve"));
     fmwl_iter = args.get<int>("--fmwl_iter");
     fmwl_area_coef = args.get<double>("--fmwl_area_coef");
@@ -201,7 +202,11 @@ void Setting::parse(argparse::ArgumentParser args) {
     skip_2_5d = str2bool(args.get<std::string>("--skip_2_5d"));
     skip_patoh = str2bool(args.get<std::string>("--skip_patoh"));
     utilization = args.get<double>("--utilization");
+    macro_padding = args.get<int>("--macro_padding");
     fm_cut_size = str2bool(args.get<std::string>("--fm_cut_size"));
+    bondingSizeX = args.get<int>("--bondingSizeX");
+    bondingSizeY = args.get<int>("--bondingSizeY");
+    bondingSpace = args.get<int>("--bondingSpace");
 
     
     rotate_180 = str2bool(args.get<std::string>("--rotate_180"));

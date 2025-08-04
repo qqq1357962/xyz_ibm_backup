@@ -152,6 +152,7 @@ argparse::ArgumentParser get_option(int argc, char* argv[]) {
     parser.add_argument("--filler_type").default_value(string("center")).help("");
     parser.add_argument("--kernel_size").default_value(int(1)).help("Gaussian kernel size").scan<'i', int>();
     parser.add_argument("--num_bin_3d").default_value(int(1)).help("").scan<'i', int>();
+    parser.add_argument("--num_bin_3d_y").default_value(int(1)).help("").scan<'i', int>();
     parser.add_argument("--visualize_curve").default_value(string("false")).help("");
     parser.add_argument("--fmwl_iter").default_value(int(1)).help("").scan<'i', int>();
     parser.add_argument("--fmwl_area_coef").default_value(double(10)).help("").scan<'g', double>();
@@ -176,6 +177,10 @@ argparse::ArgumentParser get_option(int argc, char* argv[]) {
     parser.add_argument("--skip_patoh").default_value(string("true")).help("skip 2d placer");
     parser.add_argument("--utilization").default_value(double(1)).help("Utilization in area").scan<'g', double>();
     parser.add_argument("--fm_cut_size").default_value(string("false")).help("Use FM optimize cut size");
+    parser.add_argument("--macro_padding").default_value(int(0)).help("macro padding by site height").scan<'i', int>();
+    parser.add_argument("--bondingSizeX").default_value(int(0)).help("bonding Size on X").scan<'i', int>();
+    parser.add_argument("--bondingSizeY").default_value(int(0)).help("bonding Size on Y").scan<'i', int>();
+    parser.add_argument("--bondingSpace").default_value(int(0)).help("bonding Space").scan<'i', int>();
 
 
 

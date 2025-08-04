@@ -145,6 +145,12 @@ tuple<torch::Tensor, torch::Tensor> ElectronicDensityLayer::direct_calc_overflow
     ratio = ratio.clamp(0,1);
     // mov_node_size = mov_node_size_top * ratio + mov_node_size_bot * (1-ratio);
     node_size_morm_util.slice(0,mov_lhs, mov_rhs).slice(1,0,2) *= (ratio_difference*(1-ratio)+ratio);
+    auto node_height = node_size_morm_util.index({torch::indexing::Slice(), 1});
+    int n = 50;
+    auto large_macro_mask = node_height > n * node_height.index({torch::indexing::Slice(mov_lhs, mov_rhs)}).mean();
+    large_macro_mask = large_macro_mask.unsqueeze(1).expand({-1, 3});
+    large_macro_mask = large_macro_mask.to(torch::dtype(node_size_morm_util.dtype()).device(node_size_morm_util.device()));
+    node_size_morm_util *= (1 - large_macro_mask);
 
     // node_size_morm_util.index({Slice(mov_lhs, mov_rhs), 1}) *= node_util_weight_y.index_select(0, node_die);//[CUDAFloatType [947970, 3]]
     // node_size_morm_util.index({Slice(mov_lhs, mov_rhs), 0}) *= node_util_weight_x.index_select(0, node_die);//@@@@@@@

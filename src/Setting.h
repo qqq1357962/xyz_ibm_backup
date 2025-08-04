@@ -108,6 +108,7 @@ public:
     bool skip_2_5d;
     bool skip_patoh;
     double utilization;
+    int macro_padding;
     bool fm_cut_size;
 
     bool rotate_180 = false;
@@ -163,6 +164,7 @@ public:
     std::string filler_type;
     int kernel_size;
     int num_bin_3d;
+    int num_bin_3d_y;
     bool visualize_curve;
     int fmwl_iter;
     double fmwl_area_coef;
@@ -174,6 +176,9 @@ public:
     int first_magic_hpwl; 
     int second_num_bin_x;
     int second_num_bin_y;
+    int bondingSizeX;
+    int bondingSizeY;
+    int bondingSpace;
 
     // other
     double draw_mat_size;
@@ -259,5 +264,6 @@ BOOST_FUSION_ADAPT_STRUCT(st::Setting,
                           net_weight_type,
                           filler_type,
                           num_bin_3d,
+                          num_bin_3d_y,
                           omni_int,
                           omni_float)

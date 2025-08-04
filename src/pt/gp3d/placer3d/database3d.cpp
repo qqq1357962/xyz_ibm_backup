@@ -7,7 +7,7 @@ NodeData3D::NodeData3D(NodeData& data) {
     // num_bin_x = st::setting.num_bin_x / st::setting.bin_expand;
     // num_bin_y = st::setting.num_bin_y / st::setting.bin_expand;
     num_bin_x = st::setting.num_bin_3d;
-    num_bin_y = st::setting.num_bin_3d;
+    num_bin_y = st::setting.num_bin_3d_y == 1 ? st::setting.num_bin_3d : st::setting.num_bin_3d_y;
     num_bin_z = st::setting.num_bin_z;  // TODO:  // FIXME:
 
     /* construct ffom placedb */
@@ -122,7 +122,10 @@ NodeData3D::NodeData3D(NodeData& data) {
                                         (float)1.0 * (float)(1 + st::setting.top_util_filler)},
                                        torch::dtype(node_size.dtype()));
     
-    ratio_difference = data.node_size_bot/data.node_size_top;
+    ratio_difference = (data.node_size_bot + 1e-3) / (data.node_size_top + 1e-3);
+
+    cout << "ratio: " << ratio_difference.mean() << endl;
+    cout << "ratio: " << ratio_difference.max() << endl;
 
     if (shrink_size < 1) {
         node_util_weight = torch::tensor({(float)1.0, (float)1.0}, torch::dtype(node_size.dtype()));

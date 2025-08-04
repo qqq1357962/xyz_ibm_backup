@@ -235,6 +235,16 @@ void ViaData::init_vars() {
                                         torch::dtype(mov_node_size.dtype()).device(torch::kCPU));
         __num_fillers__ = torch::round(total_filler_area / (filler_size_x * filler_size_y)).item<int>();
 
+        if (__num_fillers__ > 1e6) {
+            logger.warning("Too many fillers: %d, set to 1000000", __num_fillers__);
+            int scaler = static_cast<int>(ceil(sqrt(static_cast<double>(__num_fillers__) / 1000000.0)));
+            filler_size_x *= scaler;
+            filler_size_y *= scaler;
+            single_filler_size = at::tensor({filler_size_x.item<float>(), filler_size_y.item<float>()},
+                                            torch::dtype(mov_node_size.dtype()).device(torch::kCPU));
+            __num_fillers__ = torch::round(total_filler_area / (filler_size_x * filler_size_y)).item<int>();
+        }
+
         mov_node_sideline_ll = torch::cat({mov_node_sideline_ll, 
                                         (single_sideline_ll).repeat({__num_fillers__, 1})}, 0);
         mov_node_sideline_ur = torch::cat({mov_node_sideline_ur, 

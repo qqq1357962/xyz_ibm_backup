@@ -214,9 +214,12 @@ Dict GlobalParser::preprocess_design_info(shared_ptr<gp::GPDatabase> gpdb) {
     int siteWidth = gpdb->getSiteWidth();
     int siteHeight = gpdb->getSiteHeight();
     const tuple<int, int> site_info = make_tuple(double(siteWidth), double(siteHeight));
-    gpdb->bondingSizeX = siteWidth * 4;
-    gpdb->bondingSizeY = siteHeight;
-    torch::Tensor bondingInfo = torch::tensor({siteWidth * 4, siteHeight, 0}, torch::dtype(torch::kFloat32));
+    int bondingSizeX = st::setting.bondingSizeX == 0 ? siteWidth * 4 : st::setting.bondingSizeX;
+    int bondingSizeY = st::setting.bondingSizeY == 0 ? siteHeight : st::setting.bondingSizeY;
+    int bondingSpace = st::setting.bondingSpace;
+    gpdb->bondingSizeX = bondingSizeX;
+    gpdb->bondingSizeY = bondingSizeY;
+    torch::Tensor bondingInfo = torch::tensor({bondingSizeX, bondingSizeY, bondingSpace}, torch::dtype(torch::kFloat32));
     int bondingCost = 0;
 
     torch::Tensor node_pos = gpdb->getNodeCPosTensor();
@@ -269,6 +272,8 @@ Dict GlobalParser::preprocess_design_info(shared_ptr<gp::GPDatabase> gpdb) {
             mov_end_idx = end_idx;
         }
     }
+    cout << "mov_end_idx: " << mov_end_idx << ", fix_end_idx: " << fix_end_idx
+         << ", connected_end_idx: " << connected_end_idx << endl;
 
     // Mov + FloatMov
     const tuple<int, int> movable_index = make_tuple(0, mov_end_idx);
