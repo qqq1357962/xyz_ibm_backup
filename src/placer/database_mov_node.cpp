@@ -174,7 +174,7 @@ tuple<at::Tensor, at::Tensor, at::Tensor> NodeData::get_mov_node_info_cross_chip
         at::Tensor filler_size_x = torch::mean(
             node_size_exact.index({"...", 0})
                 .index({mov_node_xsize_order.index({Slice(int(num_nodes * 0.05), int(num_nodes * 0.95))})}));
-        at::Tensor filler_size_y = rowHeights[i];
+        at::Tensor filler_size_y = rowHeights[i].clone();
         if ((filler_size_y > filler_size_x).item<int>() == 1) {
             filler_size_x = filler_size_y.clone();
         }

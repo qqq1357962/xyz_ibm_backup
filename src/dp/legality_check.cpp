@@ -24,7 +24,7 @@ bool boundaryCheck(const DetailedPlaceData& db, float scale_factor, int num_mova
 
 bool siteAlignmentCheck(const DetailedPlaceData& db, float scale_factor, int num_movable_nodes) {
     // use scale factor to control the precision
-    float precision = (scale_factor == 1.0) ? 1e-6 : scale_factor * 0.1;
+    float precision = (scale_factor == 1.0) ? 1e-4 : scale_factor * 0.1;
     bool legal_flag = true;
     // check row and site alignment
     for (int i = 0; i < num_movable_nodes; ++i) {

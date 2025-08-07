@@ -136,25 +136,13 @@ bool abacusPlaceRowCPU(DetailedPlaceData& db, int* row_nodes, AbacusCluster* clu
             range_xh = std::min(next_cluster.x, range_xh);
             break;
         } else {
-            if (std::abs(db.node_size_y[row_nodes[j]] - db.row_height) > 1e-6)
-            {
-                cout << row_nodes[j] << endl;
-                cout << std::abs(db.node_size_y[row_nodes[j]] - db.row_height) << endl;
-                cout << db.node_size_y[row_nodes[j]] << endl;
-            }
-            assert(db.node_size_y[row_nodes[j]] - db.row_height < 1e-6);
+            assert(std::abs(db.node_size_y[row_nodes[j]] - db.row_height) < 1e-6);
         }
     }
     for (int i = 0; i < num_row_nodes; ++i) {
         const AbacusCluster& cluster = clusters[i];
         if (cluster.e < M) {
-            if (std::abs(db.node_size_y[row_nodes[i]] - db.row_height) > 1e-6)
-            {
-                cout << row_nodes[i] << endl;
-                cout << std::abs(db.node_size_y[row_nodes[i]] - db.row_height) << endl;
-                cout << db.node_size_y[row_nodes[i]] << endl;
-            }
-            assert(db.node_size_y[row_nodes[i]] - db.row_height < 1e-6);
+            assert(std::abs(db.node_size_y[row_nodes[i]] - db.row_height) < 1e-6);
             collapse(i, range_xl, range_xh);
         } else  // set range xl/xh according to fixed nodes
         {
