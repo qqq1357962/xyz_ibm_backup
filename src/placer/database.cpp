@@ -756,11 +756,15 @@ void NodeData::postscale_by_site_width() {
     node_size *= site_width;
     auto macro_mask_size = macro_mask.unsqueeze(1).repeat({1, 2});
     auto node_die_size = node_die.index({Slice(cell_mov_lhs, cell_mov_rhs)}).unsqueeze(1).repeat({1, 2});
+    site_width_keep = st::setting.macro_padding_keep * site_height / site_width / 2 * 2;  // keep even number
+    site_height_keep = st::setting.macro_padding_keep / 2 * 2;  // keep even number
     __ori_node_size_norm__ = __ori_node_size_norm_bot__ * (1 - node_die_size) + __ori_node_size_norm_top__ * node_die_size;
     __ori_node_size_norm__ =
         __ori_node_size_norm__ * (1 - macro_mask_size) +
         (node_size.index({Slice(cell_mov_lhs, cell_mov_rhs), "..."}) - site_height * st::setting.macro_padding) *
             macro_mask_size;
+    __ori_node_size_norm__.index({Slice(cell_mov_lhs, cell_mov_rhs), 0}) += site_width * site_width_keep * macro_mask;
+    __ori_node_size_norm__.index({Slice(cell_mov_lhs, cell_mov_rhs), 1}) += site_height * site_height_keep * macro_mask;
 
     node_size = torch::cat({__ori_node_size_norm__.index({Slice(cell_mov_lhs, iopin_mov_lhs), "..."}),
                             node_size.index({Slice(iopin_mov_lhs, None), "..."})},
@@ -779,6 +783,9 @@ void NodeData::postscale_by_site_width() {
                                      (node_size_bot.index({Slice(cell_mov_lhs, cell_mov_rhs), "..."}) -
                                       site_height * st::setting.macro_padding) *
                                          macro_mask_size;
+        __ori_node_size_norm_bot__.index({Slice(cell_mov_lhs, cell_mov_rhs), 0}) += site_width * site_width_keep * macro_mask;
+        __ori_node_size_norm_bot__.index({Slice(cell_mov_lhs, cell_mov_rhs), 1}) += site_height * site_height_keep * macro_mask;
+
         node_size_bot = torch::cat({__ori_node_size_norm_bot__.index({Slice(cell_mov_lhs, iopin_mov_lhs), "..."}),
                                     node_size_bot.index({Slice(iopin_mov_lhs, None), "..."})},
                                    0);
@@ -789,6 +796,9 @@ void NodeData::postscale_by_site_width() {
                                      (node_size_top.index({Slice(cell_mov_lhs, cell_mov_rhs), "..."}) -
                                       site_height * st::setting.macro_padding) *
                                          macro_mask_size;
+        __ori_node_size_norm_top__.index({Slice(cell_mov_lhs, cell_mov_rhs), 0}) += site_width * site_width_keep * macro_mask;
+        __ori_node_size_norm_top__.index({Slice(cell_mov_lhs, cell_mov_rhs), 1}) += site_height * site_height_keep * macro_mask;
+
         node_size_top = torch::cat({__ori_node_size_norm_top__.index({Slice(cell_mov_lhs, iopin_mov_lhs), "..."}),
                                     node_size_top.index({Slice(iopin_mov_lhs, None), "..."})},
                                    0);

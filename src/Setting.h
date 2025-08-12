@@ -109,6 +109,7 @@ public:
     bool skip_patoh;
     double utilization;
     int macro_padding;
+    int macro_padding_keep;
     bool fm_cut_size;
 
     bool rotate_180 = false;

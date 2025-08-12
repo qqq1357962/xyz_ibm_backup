@@ -982,6 +982,22 @@ void run_placement_main_multi_circuit() {
             printlog(
                 LOG_WARN, "MEM: cur = %.2f MB, peak = %.2f MB", utils::mem_use::get_current(), utils::mem_use::get_peak());
         }
+
+        for (int i = 0; i < data.iopin_mov_lhs; i++) {
+            if (data.macro_mask[i].item<int>() == 1)
+            {
+                rawdb->cells[i]->place_with_orient(
+                    round((node_pos[i][0] - (node_size[i][0] - data.site_width_keep * data.site_width) / 2)
+                              .item<float>()),
+                    round((node_pos[i][1] - (node_size[i][1] - data.site_height_keep * data.site_height) / 2)
+                              .item<float>()),
+                    data.node_die[i].item<int>(),
+                    data.node_orient_top[i].item<int>());
+                rawdb->cells[i]->fixed(true);
+            }
+        }
+        rawdb->site_width_keep = data.site_width_keep;
+        rawdb->site_height_keep = data.site_height_keep;
         rawdb->writeOpenroad_vias(st::setting.output_path);
 
         std::string output_def = st::setting.output_path + "_bot.def";

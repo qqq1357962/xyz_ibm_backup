@@ -178,6 +178,7 @@ argparse::ArgumentParser get_option(int argc, char* argv[]) {
     parser.add_argument("--utilization").default_value(double(1)).help("Utilization in area").scan<'g', double>();
     parser.add_argument("--fm_cut_size").default_value(string("false")).help("Use FM optimize cut size");
     parser.add_argument("--macro_padding").default_value(int(0)).help("macro padding by site height").scan<'i', int>();
+    parser.add_argument("--macro_padding_keep").default_value(int(0)).help("macro padding by site height, kept during legalize").scan<'i', int>();
     parser.add_argument("--bondingSizeX").default_value(int(0)).help("bonding Size on X").scan<'i', int>();
     parser.add_argument("--bondingSizeY").default_value(int(0)).help("bonding Size on Y").scan<'i', int>();
     parser.add_argument("--bondingSpace").default_value(int(0)).help("bonding Space").scan<'i', int>();

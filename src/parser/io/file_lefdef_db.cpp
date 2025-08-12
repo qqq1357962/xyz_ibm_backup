@@ -753,11 +753,17 @@ bool Database::write_Openroad(const string& inputDef, const string& outputDef, c
                 ofs << "BLOCKAGES " << cell_num << " ;" << endl;
                 for (auto cell : macros) {
                     if (cell->orient() == 0 || cell->orient() == 2) {
-                        ofs << "\t" << "- PLACEMENT + SOFT RECT ( " << cell->lx() << " " << cell->ly() << " ) ( "
-                            << cell->hx() << " " << cell->hy() << " ) ;" << endl;
+                        ofs << "\t" << "- PLACEMENT + SOFT RECT ( " 
+                            << cell->lx() - site_width_keep / 2 * siteW << " "
+                            << cell->ly() - site_height_keep / 2 * siteH << " ) ( "
+                            << cell->hx() + site_width_keep / 2 * siteW << " "
+                            << cell->hy() + site_height_keep / 2 * siteH << " ) ;" << endl;
                     } else {
-                        ofs << "\t" << "- PLACEMENT + SOFT RECT ( " << cell->lx() << " " << cell->ly() << " ) ( "
-                            << cell->lx() + cell->height() << " " << cell->ly() + cell->width() << " ) ;" << endl;
+                        ofs << "\t" << "- PLACEMENT + SOFT RECT ( " 
+                            << cell->lx() - site_width_keep / 2 * siteW  << " " 
+                            << cell->ly() - site_height_keep / 2 * siteH << " ) ( "
+                            << cell->lx() + site_width_keep / 2 * siteW + cell->height() << " " 
+                            << cell->ly() + site_height_keep / 2 * siteH + cell->width() << " ) ;" << endl;
                     }
                 }
             }

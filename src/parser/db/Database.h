@@ -112,6 +112,8 @@ public:
     int siteH = 0;
     unsigned nSitesX = 0;
     unsigned nSitesY = 0;
+    int site_width_keep = 0;
+    int site_height_keep = 0;
 
     SiteMap siteMap;
     TDBins tdBins;  // local target density

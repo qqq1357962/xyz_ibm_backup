@@ -203,6 +203,8 @@ void Setting::parse(argparse::ArgumentParser args) {
     skip_patoh = str2bool(args.get<std::string>("--skip_patoh"));
     utilization = args.get<double>("--utilization");
     macro_padding = args.get<int>("--macro_padding");
+    macro_padding_keep = args.get<int>("--macro_padding_keep");
+    macro_padding = std::max(macro_padding, macro_padding_keep);
     fm_cut_size = str2bool(args.get<std::string>("--fm_cut_size"));
     bondingSizeX = args.get<int>("--bondingSizeX");
     bondingSizeY = args.get<int>("--bondingSizeY");

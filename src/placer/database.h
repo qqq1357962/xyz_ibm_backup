@@ -390,6 +390,8 @@ public:
     float area_ratio;
     float area_ratio_bot;
     float area_ratio_top;
+    int site_width_keep = 0;
+    int site_height_keep = 0;
 
     at::Tensor node_area_bot;
     at::Tensor node_area_top;
