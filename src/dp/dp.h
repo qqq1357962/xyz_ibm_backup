@@ -41,6 +41,7 @@ void legalizationV2(NodeData& data,
                     int num_bins_y,
                     int cell_mov_lhs, 
                     int cell_mov_rhs,
+                    int layer,
                     bool only_macro = false);
 
 void detail_placement(NodeData& data,

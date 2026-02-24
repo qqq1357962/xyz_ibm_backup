@@ -42,6 +42,8 @@ public:
     int __ori_die_hz__;
 
     int site_depth;
+
+    int iopin_mov_lhs, iopin_mov_rhs;
     /* area */
     torch::Tensor node_area;
     torch::Tensor mov_cell_area;
@@ -72,10 +74,12 @@ public:
     int num_fillers_cross_chip = 0;
 
     torch::Tensor macro_mask;
+    torch::Tensor Myreg_mask;
 
 public:
     void to(torch::Device device_) {
         macro_mask = macro_mask.to(device_);
+        Myreg_mask = Myreg_mask.to(device_);
         node_size = node_size.to(device_);
         pin_rel_cpos = pin_rel_cpos.to(device_);
         pin_rel_cpos_top = pin_rel_cpos_top.to(device_);

@@ -13,6 +13,7 @@ void Partitioner::run_fm_wl(NodeData& data, bool skip) {
     auto node_pos = node_pos_2d_ground;
     auto node_size = data.node_size;
     macro_mask = data.macro_mask.clone();
+    Myreg_mask = data.Myreg_mask.clone();
     // node_die = data.node_die;
 
     vector<Macro_Box> Macro_Boxs;
@@ -21,6 +22,7 @@ void Partitioner::run_fm_wl(NodeData& data, bool skip) {
     auto node_pos_a = node_pos.accessor<float, 2>();
     auto node_size_a = node_size.accessor<float, 2>();
     auto macro_mask_a = macro_mask.accessor<float, 1>();
+    auto Myreg_mask_a = Myreg_mask.accessor<float, 1>();
     auto non_zero_indices = torch::nonzero(macro_mask);
     auto non_zero_num = macro_mask.sum().item<int>();
     auto node_die_a = node_die.accessor<int, 1>();
@@ -56,6 +58,10 @@ void Partitioner::run_fm_wl(NodeData& data, bool skip) {
     }
 
     for (int i = 0; i < num_nodes; ++i) {
+        if(Myreg_mask_a[i] == 1)
+        {
+            assert(node_die_a[i] == 1);
+        }
         if (macro_mask_a[i] != 1) {
             int c_id = node_die_a[i];
             int other_c_id = 1 - c_id;
@@ -540,7 +546,12 @@ void Partitioner::initWLGain(pt::PartitionData& db, bool update) {
             if (macro_mask[node_id].item<int>() == 1) {
                 nodes[node_id]->gain_map[i] = -std::numeric_limits<float>::max();
                 gainlist[node_id] = -std::numeric_limits<float>::max();
-            } else {
+            }
+            else if (Myreg_mask[node_id].item<int>() == 1) {
+                nodes[node_id]->gain_map[i] = -std::numeric_limits<float>::max();
+                gainlist[node_id] = -std::numeric_limits<float>::max();
+            }
+            else {
                 nodes[node_id]->gain_map[i] = gain;
                 gainlist[node_id] += gain;
             }

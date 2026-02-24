@@ -365,6 +365,7 @@ public:
     torch::Tensor max_grid_mov_cell_areas;
     torch::Tensor upper_lower_bound_ratio;
     torch::Tensor macro_mask;
+    torch::Tensor Myreg_mask;
 
     /* Hyperedge */
     torch::Tensor pin_id2node_id;

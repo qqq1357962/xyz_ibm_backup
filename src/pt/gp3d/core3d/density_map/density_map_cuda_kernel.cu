@@ -1184,6 +1184,44 @@ std::tuple<torch::Tensor, torch::Tensor> macro_overlay_density_map_cuda_forward(
 
     copyToFloatAuxMat<<<cp_blocks, cp_threads, 0, stream>>>(
         aux_mat_uint64_ptr, aux_mat.data_ptr<float>(), scalar, inv_scalar, num_bin);
+    {
+        cudaDeviceSynchronize();
+        auto t = cudaGetLastError();
+        if(t != 0) {
+            printf("macro_overlay_density_map_cuda_forward flag1 error %d\n", t);
+            assert(0);
+            exit(0);
+        }
+    }
+    TORCH_CHECK(normalize_node_info.is_cuda(), "normalize_node_info must be a CUDA tensor");
+    TORCH_CHECK(rotate_rate.is_cuda(), "rotate_rate must be a CUDA tensor");
+    TORCH_CHECK(unit_len.is_cuda(), "unit_len must be a CUDA tensor");
+    TORCH_CHECK(aux_mat.is_cuda(), "aux_mat must be a CUDA tensor");
+    TORCH_CHECK(sorted_node_map.is_cuda(), "sorted_node_map must be a CUDA tensor");
+    TORCH_CHECK(node_rotate_grad2.is_cuda(), "node_rotate_grad2 must be a CUDA tensor");
+    
+    TORCH_CHECK(aux_mat.data_ptr() != nullptr, "aux_mat data_ptr is null");
+    
+    TORCH_CHECK(normalize_node_info.dim() == 2, "normalize_node_info must be 2D");
+    TORCH_CHECK(rotate_rate.dim() == 1, "rotate_rate must be 1D");
+    TORCH_CHECK(sorted_node_map.dim() == 1, "sorted_node_map must be 1D");
+    
+    TORCH_CHECK(normalize_node_info.size(0) >= num_macros, "normalize_node_info size mismatch");
+    TORCH_CHECK(sorted_node_map.size(0) >= num_macros, "sorted_node_map size mismatch");
+    TORCH_CHECK(normalize_node_info.is_contiguous(), "normalize_node_info must be contiguous");
+    int64_t required_elements = (int64_t)num_bin_x * num_bin_y * num_bin_z;
+    TORCH_CHECK(aux_mat.numel() >= required_elements, "aux_mat is smaller than bins volume");
+    
+    if (num_macros > 0) {
+        auto map_min = sorted_node_map.min().item<int64_t>();
+        auto map_max = sorted_node_map.max().item<int64_t>();
+        TORCH_CHECK(map_max < normalize_node_info.size(0), "sorted_node_map max index out of range");
+    }
+    
+    TORCH_CHECK(!normalize_node_info.isnan().any().item<bool>(), "normalize_node_info contains NaN");
+    TORCH_CHECK(!normalize_node_info.isinf().any().item<bool>(), "normalize_node_info contains Inf");
+    
+    TORCH_CHECK(unit_len[0].item<double>() > 1e-9 && unit_len[1].item<double>() > 1e-9, "unit_len contains zero, causing inf coordinates");
 
     int threads = 64;
     int blocks = (num_macros + threads - 1) / threads;
@@ -1201,6 +1239,18 @@ std::tuple<torch::Tensor, torch::Tensor> macro_overlay_density_map_cuda_forward(
                 num_bin_z,
                 num_macros);
     }));
+
+    {
+        cudaDeviceSynchronize();
+        auto t = cudaGetLastError();
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            printf("macro_overlay_density_map_cuda_forward failed : %s\n", cudaGetErrorString(err));
+            AT_ERROR("CUDA error: ", cudaGetErrorString(err));
+            assert(0);
+            exit(0);
+        }
+    }
 
     return {aux_mat, node_rotate_grad2};
 }  // END MODULE
@@ -1263,6 +1313,17 @@ torch::Tensor macro_density_map_cuda_forward(torch::Tensor normalize_node_info,
         
         copyToFloatAuxMat<<<cp_blocks, cp_threads, 0, stream>>>(
             aux_mat_uint64_ptr, aux_mat.data_ptr<float>(), scalar, inv_scalar, num_bin);
+    }
+    {
+        cudaDeviceSynchronize();
+        auto t = cudaGetLastError();
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            printf("macro_density_map_cuda_forward failed : %s\n", cudaGetErrorString(err));
+            AT_ERROR("CUDA error: ", cudaGetErrorString(err));
+            assert(0);
+            exit(0);
+        }
     }
     return aux_mat;
 }  // END MODULE
@@ -1336,6 +1397,18 @@ torch::Tensor density_map_cuda_backward(torch::Tensor normalize_node_info,
                                       num_nodes);
                           }));
 
+    }
+
+    {
+        cudaDeviceSynchronize();
+        auto t = cudaGetLastError();
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            printf("density_map_cuda_backward failed : %s\n", cudaGetErrorString(err));
+            AT_ERROR("CUDA error: ", cudaGetErrorString(err));
+            assert(0);
+            exit(0);
+        }
     }
 
     return node_grad;
@@ -1416,6 +1489,18 @@ torch::Tensor density_map_cuda_forward_naive(torch::Tensor node_pos,
                           }));
     }
 
+    {
+        cudaDeviceSynchronize();
+        auto t = cudaGetLastError();
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            printf("density_map_cuda_forward_naive failed : %s\n", cudaGetErrorString(err));
+            AT_ERROR("CUDA error: ", cudaGetErrorString(err));
+            assert(0);
+            exit(0);
+        }
+    }
+
     return aux_mat;
 }  // END MODULE
 
@@ -1450,7 +1535,17 @@ torch::Tensor density_map_cuda_normalize_node(torch::Tensor node_pos,
                                   num_bin_y,
                                   num_nodes);
                           }));
-
+    {
+        cudaDeviceSynchronize();
+        auto t = cudaGetLastError();
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            printf("density_map_cuda_normalize_node failed : %s\n", cudaGetErrorString(err));
+            AT_ERROR("CUDA error: ", cudaGetErrorString(err));
+            assert(0);
+            exit(0);
+        }
+    }
     return normalize_node_info;
 }  // END MODULE
 
@@ -1542,7 +1637,17 @@ torch::Tensor density_backward_cuda(torch::Tensor normalize_node_info,
                                   num_bin_y,
                                   num_bin_z);
                           }));
-
+    {
+        cudaDeviceSynchronize();
+        auto t = cudaGetLastError();
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            printf("density_backward_cuda failed : %s\n", cudaGetErrorString(err));
+            AT_ERROR("CUDA error: ", cudaGetErrorString(err));
+            assert(0);
+            exit(0);
+        }
+    }
     return node_grad;
 }
 

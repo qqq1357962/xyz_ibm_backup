@@ -21,6 +21,18 @@ GPDatabase::~GPDatabase() { printlog(LOG_INFO, "destruct gpdb"); }
 
 void GPDatabase::addCellNode(index_type cell_id, std::string& node_type) {
     auto cell = database.cells[cell_id];
+    if (!cell) {
+        printf("Error: cell_id %d is null\n", cell_id);
+        return;
+    }
+    
+    if (cell->ctype() == nullptr) {
+        printf("Error: cell_id %d (%s) has no ctype!\n", cell_id, cell->name().c_str());
+        return; 
+    }
+    // else{
+    //     printf("  Info: cell_id %d (%s) has type! %s\n", cell_id, cell->name().c_str(), cell->ctype()->name.c_str());
+    // }
     nodes.emplace_back(GPNode());
     GPNode& node = nodes.back();
     node.setId(nodes.size() - 1);
@@ -278,6 +290,7 @@ void GPDatabase::setupNum() {
     siteW = static_cast<int>(database.siteW);
     siteH = database.siteH;
 
+    // num_nodes = database.cells.size() + database.iopins.size() + database.placeBlockages.size();
     num_nodes = database.cells.size() + database.iopins.size();
     // num_nodes = database.cells.size();
     num_nets = database.nets.size();
@@ -286,6 +299,7 @@ void GPDatabase::setupNum() {
     for (auto& dbnet : database.nets) {
         num_pins += dbnet->pins.size();
     }
+    std::cout << "in setupNum. num_pins = " << num_pins << " num_nets = " << num_nets << std::endl;
     num_regions = database.regions.size();
     num_rows = database.rows.size();
 
@@ -297,7 +311,7 @@ void GPDatabase::setupNum() {
     pins_mT.reserve(num_pins);
     nets_mT.reserve(num_nets);
 
-    pin_id2node_id.reserve(num_pins);
+    pin_id2node_id.reserve(num_pins); //@@
     pin_id2net_id.reserve(num_pins);
 }
 
@@ -377,7 +391,7 @@ void GPDatabase::setupNodes() {
     cur_node_type = "Blkg";
     stard_idx = nodes.size();
     for (index_type blkg_id = 0; blkg_id < static_cast<index_type>(database.placeBlockages.size()); blkg_id++) {
-        addBlockageNode(blkg_id, cur_node_type);
+        // addBlockageNode(blkg_id, cur_node_type);
     }
     end_idx = nodes.size();
     node_types_indices.emplace_back(std::make_tuple(stard_idx, end_idx, cur_node_type));
@@ -442,6 +456,16 @@ void GPDatabase::setupIndexMap() {
 }
 
 void GPDatabase::setupCheckVar() {
+    std::ofstream debug_file("debug.txt");
+    if (debug_file.is_open()) {
+        std::cerr << "can open debug.txt, output  " << nodes.size() << "nodes" << std::endl;
+        for (const auto& node : nodes) {
+            debug_file << node.getName() << std::endl;
+        }
+        debug_file.close();
+    } else {
+        std::cerr << "can not open debug.txt" << std::endl;
+    }
     assert_msg(nodes.size() == num_nodes, "Nodes size is (%d), it should be (%d)", nodes.size(), num_nodes);
     assert_msg(nets.size() == num_nets, "Nets size is (%d), it should be (%d)", nets.size(), num_nets);
     assert_msg(pins.size() == num_pins, "Pins size is (%d), it should be (%d)", pins.size(), num_pins);
@@ -602,6 +626,20 @@ torch::Tensor GPDatabase::getMacroMaskTensor() {
         }
     }
     return macro_mask;
+}
+
+torch::Tensor GPDatabase::getMyRegMask() {
+    torch::Tensor myRegMask = torch::zeros({num_nodes});
+    auto reg_mask_a = myRegMask.accessor<coord_type, 1>();
+    int reg_cnt = 0;
+    for (auto& node : nodes) {
+        if (node.getName().length() >= 4 && node.getName().substr(0, 4) == "reg_") {
+            reg_mask_a[node.getId()]=1;
+            reg_cnt++;
+        }
+    }
+    printlog(LOG_INFO, "building database, has %d registers.\n", reg_cnt);
+    return myRegMask;
 }
 
 torch::Tensor GPDatabase::getNodeOrientTensor() {

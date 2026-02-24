@@ -279,6 +279,7 @@ public:
     //torch::Tensor getNodeCRotateTensor();
     torch::Tensor getNodeSizeTensor();
     torch::Tensor getMacroMaskTensor();
+    torch::Tensor getMyRegMask();
     torch::Tensor getPinRelLPosTensor();  // pin_lx - node_lx
     torch::Tensor getPinRelCPosTensor();  // pin_cx - node_cx
     torch::Tensor getPinSizeTensor();

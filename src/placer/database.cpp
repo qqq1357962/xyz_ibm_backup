@@ -54,6 +54,7 @@ NodeData::NodeData(Dict& design_info, torch::Device device_) {
     rowHeights = get<torch::Tensor>(design_info["rowHeights"]);
     numRows = get<torch::Tensor>(design_info["numRows"]);
     macro_mask = get<torch::Tensor>(design_info["macro_mask"]);
+    Myreg_mask = get<torch::Tensor>(design_info["Myreg_mask"]);
 
     /* node/pin info */  // FIXME: see below
     node_pos = get<torch::Tensor>(design_info["node_pos"]);
@@ -114,6 +115,9 @@ NodeData::NodeData(Dict& design_info, torch::Device device_) {
     num_nodes = node_pos.size(0);
     num_pins = pin_id2node_id.size(0);
     num_nets = hyperedge_list_end.size(0);
+    
+    // std::cout << num_pins << " num pins" << std::endl;
+    // std::cout << pin_id2node_id.slice(0, 0, 100) << std::endl;
     
     node_to_num_pins = torch::zeros(num_nodes);
     torch::Tensor v = torch::ones(pin_id2node_id.sizes()[0]);
@@ -362,12 +366,21 @@ NodeData::NodeData(Dict& design_info, torch::Device device_) {
     int count = 0;
     cout << "==================================== #pins ====================================\n";
     auto long_cells = torch::_cast_Float(aspect_ratio > 6);
+
+    auto size_target = node_to_num_pins.size(0);
+    long_cells = long_cells.slice(0, 0, size_target);
+    std::cout << "long_cells shape: " << long_cells.sizes() << std::endl;
+    std::cout << "node_to_num_pins shape: " << node_to_num_pins.sizes() << std::endl;
+
     auto pin_cells = torch::_cast_Float(node_to_num_pins > 5);
     // stack_cells = torch::logical_and(node_to_num_pins.squeeze(1) >= 5, aspect_ratio > 6);
     // stack_cells = torch::logical_or(node_to_num_pins.squeeze(1) >= 5, aspect_ratio > 6);
     stack_cells = node_to_num_pins.squeeze(1) >= 5;
 
     logger.info("%d cells are stacked to chip %d", torch::_cast_Int(stack_cells).sum().item<int>(), st::setting.stack_cells);
+
+    // std::cout << node_to_num_pins.reshape(-1).slice(0, 0, 100) << std::endl; //all zero
+    // std::cout << mov_cell_area_bot.reshape(-1).slice(0, 0, 100) << std::endl;
 
     cout << "pins/area: " << node_to_num_pins.sum().item<int>() / mov_cell_area_bot.item<float>() << endl;
     cout << "long cells: " << long_cells.sum().item<int>() << " cells are long\n";
@@ -377,8 +390,13 @@ NodeData::NodeData(Dict& design_info, torch::Device device_) {
     
     cout << "avg #pins: " << node_to_num_pins.mean().item<float>() << endl;
     cout << "max #pins: " << node_to_num_pins.max().item<float>() << endl;
-    cout << "avg long #pins: " << ((node_to_num_pins.squeeze() * long_cells).sum() / long_cells.sum()).item<float>() << endl;
-    cout << "max long #pins: " << (node_to_num_pins.squeeze() * long_cells).max().item<float>() << endl;
+    // node_to_num_pins:total_nodes. long_cells: cells.
+    
+    std::cout << "long_cells shape: " << long_cells.sizes() << std::endl;
+    std::cout << "node_to_num_pins shape: " << node_to_num_pins.sizes() << std::endl;
+
+    cout << "avg long #pins: " << ((node_to_num_pins.slice(0, 0, mov_rhs).squeeze() * long_cells).sum() / long_cells.sum()).item<float>() << endl;//
+    cout << "max long #pins: " << (node_to_num_pins.slice(0, 0, mov_rhs).squeeze() * long_cells).max().item<float>() << endl;
 
     cout << "==================================== size ====================================\n";
     auto enlarge = torch::prod(node_size_bot, 1) / torch::prod(node_size_top, 1);

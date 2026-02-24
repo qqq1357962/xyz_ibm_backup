@@ -167,6 +167,7 @@ ViaData::ViaData(NodeData& data_, shared_ptr<db::Database> rawdb_, torch::Tensor
             node_die[i] = 2;
         }
     }
+    std::cout << "data.bondingInfo[0] " << data.bondingInfo[0] << "data.bondingInfo[1] " << data.bondingInfo[1] <<std::endl;
 
     /* precompute_var */
     target_density = st::setting.via_target_density;
@@ -193,6 +194,7 @@ void ViaData::init_vars() {
     auto data = *data_ptr;
     /* PlaceData::compute_filler */
     /* vias are all movalbe */
+    std::cout << "initializing via data. debug. num_nets " << num_nets <<std::endl;
     movable_index = make_tuple(0, num_nets);
     auto [mov_lhs, mov_rhs] = movable_index;
     torch::Tensor mov_node_size = node_size;
@@ -380,6 +382,8 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> ViaData::get_mov_node_info() 
     auto [mov_lhs, mov_rhs] = movable_index;
     at::Tensor mov_node_pos = node_pos.index({Slice(mov_lhs, mov_rhs)}).clone();
     at::Tensor mov_node_size = node_size.index({Slice(mov_lhs, mov_rhs)}).clone();
+    std::cout << "in get_mov_node_info(), mov_node_size.sizes() " << mov_node_size.sizes() << std::endl;
+    std::cout << "in get_mov_node_info(), check mov_node_size " << mov_node_size.reshape(-1).slice(0, 0, 100) << std::endl;
 
     torch::Tensor scale = (data.die_ur - data.die_ll) * 0.001;
     torch::Tensor loc = (data.die_ur + data.die_ll) * 0.5;

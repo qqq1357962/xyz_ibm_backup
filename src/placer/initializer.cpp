@@ -1,4 +1,6 @@
 #include "initializer.h"
+#include <cuda_runtime.h>
+#include <cuda.h>
 
 torch::Tensor get_init_density_map(PlaceData& data) {
     auto [lhs, rhs] = data.fixed_index;
@@ -160,7 +162,18 @@ void init_params_multi_circuit(torch::Tensor mov_node_pos,
                                torch::Tensor conn_fix_node_pos, vector<ElectronicDensityLayer>& density_map_layers,
                                torch::Tensor mov_node_size, torch::Tensor init_density_maps,
                                torch::optim::Optimizer& optimizer, ParamScheduler& ps, NodeData& data) {
+    // Assert input parameters are valid
+    assert(mov_node_pos.defined() && "mov_node_pos tensor is undefined");
+    assert(conn_fix_node_pos.defined() && "conn_fix_node_pos tensor is undefined");
+    assert(mov_node_size.defined() && "mov_node_size tensor is undefined");
+    assert(init_density_maps.defined() && "init_density_maps tensor is undefined");
+    assert(mov_lhs >= 0 && mov_rhs >= mov_lhs && "Invalid mov_lhs/mov_rhs range");
+
     mov_node_pos = trunc_node_pos_fn(mov_node_pos);
+
+    // Check bounds before slicing
+    assert(mov_rhs <= mov_node_pos.size(0) && "mov_rhs exceeds tensor dimension");
+
     torch::Tensor conn_node_pos = mov_node_pos.index({Slice(mov_lhs, mov_rhs), "..."});
     conn_node_pos = torch::cat({conn_node_pos, conn_fix_node_pos}, 0);
 
@@ -209,8 +222,63 @@ void init_params_multi_circuit(torch::Tensor mov_node_pos,
                                                   : (den_losses[0] + den_losses[1]);
     }
 
+    std::cout << "st::setting.num_den_layer" << st::setting.num_den_layer <<std::endl;
+
+    std::cout << "den_loss" << den_loss <<std::endl;
+
+    std::cout << "wl_loss" << wl_loss <<std::endl;
+
+    // Check for NaN/Inf in losses before gradient calculation
+    if (torch::isnan(den_loss).any().item<bool>() || torch::isinf(den_loss).any().item<bool>()) {
+        std::cout << "Error: den_loss contains NaN or Inf values!" << std::endl;
+        assert(false && "den_loss contains invalid values");
+    }
+    if (torch::isnan(wl_loss).any().item<bool>() || torch::isinf(wl_loss).any().item<bool>()) {
+        std::cout << "Error: wl_loss contains NaN or Inf values!" << std::endl;
+        assert(false && "wl_loss contains invalid values");
+    }
+
+    // Synchronize CUDA and check for errors before gradient calculation
+    if (mov_node_pos.is_cuda()) {
+        cudaDeviceSynchronize();
+        cudaError_t cuda_err = cudaGetLastError();
+        if (cuda_err != cudaSuccess) {
+            std::cout << "CUDA error detected before calc_grad: " << cudaGetErrorString(cuda_err) << std::endl;
+            std::cout << "This error may be from a previous CUDA operation" << std::endl;
+            assert(false && "CUDA error before gradient calculation");
+        }
+    }
+
     auto [wl_grad, density_grad] = calc_grad(optimizer, mov_node_pos, wl_loss, den_loss);
-    double init_density_weight = (wl_grad.norm(1) / density_grad.norm(1)).detach().item<double>();
+
+    // Check for CUDA errors after gradient calculation
+    if (mov_node_pos.is_cuda()) {
+        cudaDeviceSynchronize();
+        cudaError_t cuda_err = cudaGetLastError();
+        if (cuda_err != cudaSuccess) {
+            std::cout << "CUDA error detected after calc_grad: " << cudaGetErrorString(cuda_err) << std::endl;
+            assert(false && "CUDA error after gradient calculation");
+        }
+    }
+
+    // Assert gradients are valid
+    assert(wl_grad.defined() && "wl_grad is undefined");
+    assert(density_grad.defined() && "density_grad is undefined");
+    assert(!torch::isnan(wl_grad).any().item<bool>() && "wl_grad contains NaN values");
+    assert(!torch::isinf(wl_grad).any().item<bool>() && "wl_grad contains Inf values");
+    assert(!torch::isnan(density_grad).any().item<bool>() && "density_grad contains NaN values");
+    assert(!torch::isinf(density_grad).any().item<bool>() && "density_grad contains Inf values");
+
+    // Check gradient norms before division
+    double density_grad_norm = density_grad.norm(1).item<double>();
+    assert(density_grad_norm > 0.0 && "density_grad norm is zero - cannot divide by zero");
+
+    double init_density_weight = (wl_grad.norm(1) / density_grad_norm).detach().item<double>();
+
+    // Check for valid init_density_weight
+    assert(!std::isnan(init_density_weight) && "init_density_weight is NaN");
+    assert(!std::isinf(init_density_weight) && "init_density_weight is Inf");
+    assert(init_density_weight >= 0.0 && "init_density_weight is negative");
 
     printlog(LOG_INFO, "Init density weight %.3E", init_density_weight);
 

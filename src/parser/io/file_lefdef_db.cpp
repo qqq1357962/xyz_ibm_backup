@@ -233,7 +233,7 @@ bool Database::readDEF(const std::string& file) {
     defrSetBlockageCbk(readDefBlockage);
 
     defrSetSNetStartCbk(readDefSNetStart);
-    defrSetSNetCbk(readDefSNet);
+    // defrSetSNetCbk(readDefSNet);
     //  defrSetSNetWireCbk(readDefSnetwire);
     defrSetNetStartCbk(readDefNetStart);
     defrSetNetCbk(readDefNet);
@@ -713,12 +713,21 @@ bool Database::write_Openroad(const string& inputDef, const string& outputDef, c
                                     break;
                             }
                             ofs << endl;
-                            getline(ifs, line);
-                            ofs << line << "+ PORT" << endl;
+                            // int placed =
+                            // ofs << "  + PORT" << endl;
                             getline(ifs, line);
                             ofs << line << endl;
                             getline(ifs, line);
-                            ofs << "\t\t  + " << "PLACED ( " << iopin->x << " " << iopin->y << " ) N ;\n";
+                            ofs << line << endl;
+                            if (line.find("PLACED") != std::string::npos) {
+                                continue;
+                            }
+                            getline(ifs, line);
+                            ofs << line << endl;
+                            if (line.find("PLACED") != std::string::npos) {
+                                continue;
+                            }
+                            // ofs << "\t\t  + " << "PLACED ( " << iopin->x << " " << iopin->y << " ) N ;\n";
                         }
                     }
                     if (s == "END") {
@@ -732,9 +741,9 @@ bool Database::write_Openroad(const string& inputDef, const string& outputDef, c
                 auto& bonding = bondings[bondingId];
                 int netId = bonding.netId();
                 string netName = nets[netId]->name;
-                ofs << "\t - HBT\\[" << netId << "\\] + NET " << expand_name(netName) << " + DIRECTION OUTPUT + USE SIGNAL" << std::endl;
-                ofs << "\t\t+ PORT" << endl;
-                ofs << "\t\t  + LAYER PAD ( " << -bondingSizeX / 2 << " " << -bondingSizeY / 2 << " ) ( "
+                ofs << "\t - HBT\\[" << netId << "\\] + NET " << expand_name(netName) << " + DIRECTION INPUT + USE SIGNAL" << std::endl;
+                // ofs << "\t\t+ PORT" << endl;
+                ofs << "\t\t  + LAYER M9 ( " << -bondingSizeX / 2 << " " << -bondingSizeY / 2 << " ) ( "
                     << bondingSizeX / 2 << " " << bondingSizeY / 2 << " )" << endl;
                 ofs << "\t\t  + PLACED ( " << bonding.lx() << " " << bonding.ly() << " ) N ;" << endl;
             }
@@ -766,8 +775,8 @@ bool Database::write_Openroad(const string& inputDef, const string& outputDef, c
                             << cell->ly() + site_height_keep / 2 * siteH + cell->width() << " ) ;" << endl;
                     }
                 }
+                ofs << "END BLOCKAGES" << endl;
             }
-            ofs << "END BLOCKAGES" << endl;
             continue;
         }
         while (getline(ifs, line)) {
@@ -808,7 +817,7 @@ bool Database::write_openroad_partition(const string& inputDef, const string& ou
         string s;
         if (!(iss >> s)) {
             if (load_pin) {
-                ofs << line << "+ PORT" << endl;
+                // ofs << line << " + PORT" << endl;
             } else {
                 ofs << line << endl;
             }
@@ -1121,6 +1130,7 @@ int readLefLayer(lefrCallbackType_e c, lefiLayer* leflayer, lefiUserData ud) {
     }
 
     Layer& layer = db->addLayer(name, type);
+    printf("added layer %s with type %c\n", name.c_str(), type);
 
     switch (type) {
         case 'r':
@@ -1223,6 +1233,7 @@ int readLefMacroBegin(lefrCallbackType_e c, const char* macroName, lefiUserData 
 
     string name(macroName);
     db->addCellType(name, db->celltypes.size());
+    // printf("added cell type %s\n", name);
     return 0;
 }
 
@@ -1337,6 +1348,11 @@ int readLefPin(lefrCallbackType_e c, lefiPin* pin, lefiUserData ud) {
                 break;
             case lefiGeomLayerE:
                 layer = db->getLayer(string(geom->getLayer(i)));
+                if(!layer)
+                {
+                    printf("can not find %s\n", string(geom->getLayer(i)).c_str());
+                    fflush(stdout);
+                }
                 assert(layer);
                 break;
             case lefiGeomRectE:
@@ -1711,7 +1727,8 @@ int readDefComponent(defrCallbackType_e c, defiComponent* co, defiUserData ud) {
 
     Cell* cell = db->addCell(co->id(), db->getCellType(co->name()));
 
-    if (co->isUnplaced()) {
+    // if (co->isUnplaced()) {
+    if (1) {
         cell->fixed(false);
         cell->unplace();
     } else if (co->isPlaced()) {
@@ -1737,11 +1754,18 @@ int readDefPin(defrCallbackType_e c, defiPin* dpin, defiUserData ud) {
             // OUTPUT to the chip, input to external
             direction = 'i';
         } else {
-            printlog(LOG_WARN, "unknown pin signal direction: %s", dpin->direction());
+            printlog(LOG_WARN, "unknown pin signal direction: %s. SKIPPED. pinname %s", dpin->direction(), dpin->pinName());
+            return 0;
         }
     } else {
         string pinName(dpin->pinName());
         printlog(LOG_WARN, "Pin %s has no pin signal direction", pinName.c_str());
+    }
+    
+    if(dpin->pinName()=="VSS" || dpin->pinName()=="VDD")
+    {
+        printlog(LOG_WARN, "skipped power net port %s", dpin->pinName());
+        return 0;
     }
 
     IOPin* iopin = db->addIOPin(string(dpin->pinName()), string(dpin->netName()), direction);

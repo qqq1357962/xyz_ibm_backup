@@ -164,6 +164,7 @@ void GlobalParser::single_openroad(const st::Setting& setting) {
 
     std::string lef_file;
     while (std::getline(file, lef_file)) {
+        printf("read %s\n", lef_file.c_str());
         lef_files.push_back(lef_file);
     }
 
@@ -216,6 +217,8 @@ Dict GlobalParser::preprocess_design_info(shared_ptr<gp::GPDatabase> gpdb) {
     const tuple<int, int> site_info = make_tuple(double(siteWidth), double(siteHeight));
     int bondingSizeX = st::setting.bondingSizeX == 0 ? siteWidth * 4 : st::setting.bondingSizeX;
     int bondingSizeY = st::setting.bondingSizeY == 0 ? siteHeight : st::setting.bondingSizeY;
+    std::cout << " in parser, set bondingSizeX " << bondingSizeX << " bondingSizeY " << bondingSizeY << std::endl;
+    std::cout << " in parser, set bondingSpace " << st::setting.bondingSpace << "siteWidth" << siteWidth << " siteHeight " << siteHeight << std::endl;
     int bondingSpace = st::setting.bondingSpace;
     gpdb->bondingSizeX = bondingSizeX;
     gpdb->bondingSizeY = bondingSizeY;
@@ -227,6 +230,7 @@ Dict GlobalParser::preprocess_design_info(shared_ptr<gp::GPDatabase> gpdb) {
     torch::Tensor node_size = gpdb->getNodeSizeTensor();
     torch::Tensor node_size_bot = gpdb->getNodeSizeTensor();
     torch::Tensor node_size_top = gpdb->getNodeSizeTensor();
+    torch::Tensor Myreg_mask = gpdb->getMyRegMask();
     torch::Tensor pin_rel_cpos = gpdb->getPinRelCPosTensor();
     torch::Tensor pin_rel_cpos_bot = gpdb->getPinRelCPosTensor();
     torch::Tensor pin_rel_cpos_top = gpdb->getPinRelCPosTensor();
@@ -306,6 +310,7 @@ Dict GlobalParser::preprocess_design_info(shared_ptr<gp::GPDatabase> gpdb) {
 
         {"node_pos", node_pos.contiguous()},
         {"macro_mask", macro_mask.contiguous()},
+        {"Myreg_mask", Myreg_mask.contiguous()},
         {"node_size_bot", node_size_bot.contiguous()},
         {"pin_rel_cpos_bot", pin_rel_cpos_bot.contiguous()},
         {"pin_size_bot", pin_size_bot.contiguous()},

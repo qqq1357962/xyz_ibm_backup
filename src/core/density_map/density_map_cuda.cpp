@@ -50,7 +50,9 @@ torch::Tensor density_map_backward(torch::Tensor normalize_node_info,
     CHECK_INPUT(grad_mat);
     CHECK_INPUT(sorted_node_map);
     CHECK_INPUT(node_grad);
-
+    CHECK_INPUT(node_grad_4part);
+    CHECK_INPUT(macro_mask);
+    // std::cout<<"???? before density_map_cuda_backward" << std::endl; 
     return density_map_cuda_backward(
         normalize_node_info, grad_mat, sorted_node_map, node_grad, node_grad_4part, macro_mask, grad_weight, num_bin_x, num_bin_y, num_nodes, deterministic);
 }

@@ -1,5 +1,7 @@
 
 #include "calculator.h"
+#include <cuda_runtime.h>
+#include <cuda.h>
 
 torch::Tensor calc_loss(torch::Tensor wl_loss, torch::Tensor density_loss, ParamScheduler& ps) {
     torch::Tensor loss;
@@ -121,12 +123,69 @@ tuple<torch::Tensor, torch::Tensor> calc_grad(torch::optim::Optimizer& optimizer
                                               torch::Tensor mov_node_pos,
                                               torch::Tensor wl_loss,
                                               torch::Tensor density_loss) {
+    // Assert input tensors are valid
+    assert(mov_node_pos.defined() && "mov_node_pos tensor is undefined");
+    assert(wl_loss.defined() && "wl_loss tensor is undefined");
+    assert(density_loss.defined() && "density_loss tensor is undefined");
+
+    // Assert tensors have valid memory
+    assert(!mov_node_pos.is_cuda() || mov_node_pos.device().is_cuda() && "CUDA tensor device mismatch");
+    assert(!wl_loss.is_cuda() || wl_loss.device().is_cuda() && "CUDA tensor device mismatch");
+    assert(!density_loss.is_cuda() || density_loss.device().is_cuda() && "CUDA tensor device mismatch");
+
     optimizer.zero_grad();
+
+    // Check for NaN/Inf in wl_loss before backward
+    if (torch::isnan(wl_loss).any().item<bool>() || torch::isinf(wl_loss).any().item<bool>()) {
+        std::cout << "Error: wl_loss contains NaN or Inf values!" << std::endl;
+        assert(false && "wl_loss contains invalid values");
+    }
+
     wl_loss.backward({}, c10::optional<bool>(true));
     torch::Tensor wl_grad = mov_node_pos.grad().detach().clone();
+
+    // Assert gradient is valid
+    assert(wl_grad.defined() && "wl_grad is undefined after backward");
+    assert(!torch::isnan(wl_grad).any().item<bool>() && "wl_grad contains NaN values");
+    assert(!torch::isinf(wl_grad).any().item<bool>() && "wl_grad contains Inf values");
+
     optimizer.zero_grad();
+
+    // Check for NaN/Inf in density_loss before backward
+    if (torch::isnan(density_loss).any().item<bool>() || torch::isinf(density_loss).any().item<bool>()) {
+        std::cout << "Error: density_loss contains NaN or Inf values!" << std::endl;
+        assert(false && "density_loss contains invalid values");
+    }
+
+    // Synchronize CUDA and check for previous errors before backward pass
+    if (mov_node_pos.is_cuda()) {
+        cudaDeviceSynchronize();
+        cudaError_t cuda_err = cudaGetLastError();
+        if (cuda_err != cudaSuccess) {
+            std::cout << "CUDA error detected before density_loss.backward(): " << cudaGetErrorString(cuda_err) << std::endl;
+            std::cout << "This error may be from a previous CUDA operation" << std::endl;
+            assert(false && "CUDA error before backward pass");
+        }
+    }
+
     density_loss.backward({}, c10::optional<bool>(true));
+
+    // Check for CUDA errors after backward pass
+    if (mov_node_pos.is_cuda()) {
+        cudaDeviceSynchronize();
+        cudaError_t cuda_err = cudaGetLastError();
+        if (cuda_err != cudaSuccess) {
+            std::cout << "CUDA error detected after density_loss.backward(): " << cudaGetErrorString(cuda_err) << std::endl;
+            assert(false && "CUDA error after backward pass");
+        }
+    }
     torch::Tensor density_grad = mov_node_pos.grad().detach().clone();
+
+    // Assert gradient is valid
+    assert(density_grad.defined() && "density_grad is undefined after backward");
+    assert(!torch::isnan(density_grad).any().item<bool>() && "density_grad contains NaN values");
+    assert(!torch::isinf(density_grad).any().item<bool>() && "density_grad contains Inf values");
+
     optimizer.zero_grad();
     return {wl_grad, density_grad};
 }

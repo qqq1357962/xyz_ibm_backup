@@ -15,6 +15,9 @@ NodeData3D::NodeData3D(NodeData& data) {
     connected_index = data.connected_index;
     fixed_index = data.fixed_index;
     node_type_indices = data.node_type_indices;
+    
+    iopin_mov_lhs = data.iopin_mov_lhs;
+    iopin_mov_rhs = data.iopin_mov_rhs;
 
     /* copy form data */
     die_info = data.die_info.clone();  // TODO: ori_die_info / die_info
@@ -24,6 +27,12 @@ NodeData3D::NodeData3D(NodeData& data) {
     node_pos = data.node_pos.clone();
     pin_rel_cpos = data.pin_rel_cpos.clone();
     macro_mask = data.macro_mask.clone();
+    Myreg_mask = data.Myreg_mask.clone();
+    int num_registers = Myreg_mask.sum().item<int>();
+    logger.info("Found %d registers out of %d total nodes (%.2f%%)", 
+        num_registers, 
+        Myreg_mask.size(0), 
+        100.0 * num_registers / Myreg_mask.size(0));
 
     __ori_die_lx__ = die_info[0].item<int>();
     __ori_die_hx__ = die_info[1].item<int>();
@@ -88,7 +97,7 @@ NodeData3D::NodeData3D(NodeData& data) {
     // clamp_node = st::setting.num_bin_3d == 1 ? st::setting.clamp_node : false;
     clamp_node = st::setting.clamp_node;
     shrink_size = st::setting.shrink_size;
-    target_density = 1 / shrink_size;  // TODO:
+    target_density = st::setting.target_density / shrink_size;  // TODO:
 
     logger.info("Cells are shrunk by %.2f", shrink_size);
 
@@ -100,6 +109,7 @@ NodeData3D::NodeData3D(NodeData& data) {
     node_size = torch::cat({node_size, node_size_z}, 1);
     // node_pos = torch::cat({node_pos, torch::randn_like(node_size_z)}, 1);
     node_pos = torch::cat({node_pos, ((data.node_die + 0.5) / 2 * __ori_die_hz__).unsqueeze(1)}, 1);
+    //@@ Sizes of tensors must match except in dimension 1. Expected size 2715314 but got size 2715312 for tensor number 1 in the list.
     auto pin_rel_cpos_z = torch::zeros({num_pins, 1}, torch::dtype(pin_rel_cpos.dtype()));
     pin_rel_cpos = torch::cat({pin_rel_cpos, pin_rel_cpos_z}, 1);
     pin_rel_cpos_top = torch::cat({pin_rel_cpos_top, pin_rel_cpos_z}, 1);
@@ -589,6 +599,8 @@ tuple<at::Tensor, at::Tensor, at::Tensor> NodeData3D::get_mov_node_info() {
         at::Tensor __mov_node_area__ = torch::prod(mov_node_size, 1);
         auto clamp_size = unit_len * sqrt(2);
         clamp_size[2] = unit_len[2];
+        std::cout << "unit_len size " << unit_len << std::endl;
+        std::cout << "clamp size " << clamp_size << std::endl;
         // at::Tensor clamp_mov_node_size = mov_node_size.clamp(clamp_size);
 
         logger.info("Cells doubled the size on x/y direction");
@@ -617,6 +629,32 @@ tuple<at::Tensor, at::Tensor, at::Tensor> NodeData3D::get_mov_node_info() {
     if (!st::setting.skip_patoh) {
         mov_node_pos.index({Slice(mov_lhs, mov_rhs), Slice(2, 3)}).copy_(node_pos.index({Slice(mov_lhs, mov_rhs), Slice(2, 3)}));
     }
+    mov_node_pos.index_put_({Slice(iopin_mov_lhs, iopin_mov_rhs), Slice(2, 3)}, loc[2]*1.5); // pre set pins to the top
+    // preset register to the top
+    if (Myreg_mask.defined() && Myreg_mask.any().item<bool>()) {
+        int64_t mask_len = Myreg_mask.size(0);
+        mov_node_pos.index({Slice(0, mask_len)})
+            .index_put_({Myreg_mask.to(torch::kBool), Slice(2, 3)}, loc[2] * 1.5);
+    }
+
+    
+    /////////////////////////////////
+    auto pos_cpu = mov_node_pos.to(torch::kCPU);
+    auto mask_cpu = Myreg_mask.to(torch::kCPU).to(torch::kBool);
+    
+    auto pos_a = pos_cpu.accessor<float, 2>();
+    auto mask_a = mask_cpu.accessor<bool, 1>();
+    
+    float target_z = loc[2].item<float>() * 1.5f;
+    
+    for (int64_t i = 0; i < mask_a.size(0); ++i) {
+        if (mask_a[i]) {
+            float current_z = pos_a[i][2];
+            assert(std::fabs(current_z - target_z) < 1e-5 && "Register Z-pos initialization failed!");
+        }
+    }
+    /////////////////////////////////
+
     mov_node_pos = mov_node_pos.detach();
 
     return make_tuple(mov_node_pos, mov_node_size, expand_ratio);

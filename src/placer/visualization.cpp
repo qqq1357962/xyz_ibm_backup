@@ -402,6 +402,8 @@ bool draw_fig_with_cairo_cpp_cross_chip(
     double hx = _die_info[1].item().toDouble();
     double ly = _die_info[2].item().toDouble();
     double hy = _die_info[3].item().toDouble();
+
+    printf("drawing %.3e, %.3e, %.3e, %.3e\n", lx, hx, ly, hy);
     auto die_info = make_tuple(lx, hx, ly, hy);
 
     // TODO: disable prescale

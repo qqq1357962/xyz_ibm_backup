@@ -1,4 +1,6 @@
 #include "evaluator.h"
+#include <cuda_runtime.h>
+#include <cuda.h>
 
 // Function TODO:
 // 1) wa_wirelength_hpwl::get_hpwl
@@ -150,7 +152,18 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> fast_evaluator_multi_circuit(
     torch::Tensor conn_fix_node_pos,
     ParamScheduler& ps,
     NodeData& data) {
+    // Assert input tensors are valid
+    assert(mov_node_pos.defined() && "mov_node_pos tensor is undefined");
+    assert(mov_node_size.defined() && "mov_node_size tensor is undefined");
+    assert(init_density_maps.defined() && "init_density_maps tensor is undefined");
+    assert(conn_fix_node_pos.defined() && "conn_fix_node_pos tensor is undefined");
+
     auto [mov_lhs, mov_rhs] = data.movable_index;
+
+    // Check bounds before slicing
+    assert(mov_rhs <= mov_node_pos.size(0) && "mov_rhs exceeds tensor dimension");
+    assert(mov_lhs >= 0 && mov_lhs < mov_rhs && "Invalid mov_lhs/mov_rhs range");
+
     mov_node_pos = constraint_fn(mov_node_pos);
     auto conn_node_pos = mov_node_pos.index({Slice({mov_lhs, mov_rhs})});
     conn_node_pos = torch::cat({conn_node_pos, conn_fix_node_pos}, 0);
@@ -196,17 +209,49 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> fast_evaluator_multi_circuit(
     torch::Tensor density_maps = torch::zeros({st::setting.num_den_layer, st::setting.num_bin_x, st::setting.num_bin_y},
                                               torch::dtype(mov_node_pos.dtype()).device(mov_node_pos.device()));
     
+    // Assert density_map_layers has enough elements
+    assert(density_map_layers.size() >= 3 && "density_map_layers must have at least 3 layers");
+    assert(init_density_maps.size(0) >= 3 && "init_density_maps must have at least 3 maps");
+
+    // Synchronize CUDA and check for errors before density calculations
+    if (mov_node_pos.is_cuda()) {
+        cudaDeviceSynchronize();
+        cudaError_t cuda_err = cudaGetLastError();
+        if (cuda_err != cudaSuccess) {
+            std::cout << "CUDA error detected before density calculations: " << cudaGetErrorString(cuda_err) << std::endl;
+            assert(false && "CUDA error before density calculations");
+        }
+    }
+
     if (st::setting.skip_2_5d) {
+        // Check bounds before accessing
+        assert(2 < density_map_layers.size() && "density_map_layers index out of bounds");
+        assert(2 < init_density_maps.size(0) && "init_density_maps index out of bounds");
+
         auto [overflow_chip, density_map] =
             density_map_layers[2].direct_calc_overflow(mov_node_pos, mov_node_size, init_density_maps[2]);
         overflows[2] = overflow_chip;
         density_maps[2] = density_map;
     } else {
         for (int i = 0; i < st::setting.num_den_layer; i++) {
+            // Check bounds before accessing
+            assert(i < density_map_layers.size() && "density_map_layers index out of bounds");
+            assert(i < init_density_maps.size(0) && "init_density_maps index out of bounds");
+
             auto [overflow_chip, density_map] =
                 density_map_layers[i].direct_calc_overflow(mov_node_pos, mov_node_size, init_density_maps[i]);
             overflows[i] = overflow_chip;
             density_maps[i] = density_map;
+
+            // Check for CUDA errors after each density calculation
+            if (mov_node_pos.is_cuda()) {
+                cudaDeviceSynchronize();
+                cudaError_t cuda_err = cudaGetLastError();
+                if (cuda_err != cudaSuccess) {
+                    std::cout << "CUDA error in density calculation layer " << i << ": " << cudaGetErrorString(cuda_err) << std::endl;
+                    assert(false && "CUDA error during density calculation");
+                }
+            }
         }
     }
     

@@ -264,7 +264,7 @@ void abacusLegalizeRowCPU(DetailedPlaceData& db,
     logger.debug("average displace = %g", displace / db.num_movable_nodes);
 }
 
-void abacusLegalizationV2(DetailedPlaceData& db, int num_bins_x, int num_bins_y) {
+void abacusLegalizationV2(NodeData& data, DetailedPlaceData& db, int num_bins_x, int num_bins_y, int layer, float step) {
     // adjust bin sizes
     float bin_size_x = (db.xh - db.xl) / num_bins_x;
     float bin_size_y = db.row_height;
@@ -274,28 +274,60 @@ void abacusLegalizationV2(DetailedPlaceData& db, int num_bins_x, int num_bins_y)
     // include both movable and fixed nodes
     std::vector<std::vector<int>> bin_cells(num_bins_x * num_bins_y);
     // distribute cells to bins
-    distributeMovableAndFixedCells2BinsCPU(db, bin_cells, num_bins_x, num_bins_y, bin_size_x, bin_size_y);//@@
+    
+    int gamma = 10;
+    int iter = (layer < 2) ? 1 : 1;
+    for (int j = 0; j < iter; j++) {
+        data.to(data.device);
+        torch::Tensor partial_wa_wl, node_grad, partial_hpwl;
+        auto partial_cross_wl = torch::zeros_like(data.node_pos);
+        auto partial_one_die_wl = torch::zeros_like(data.node_pos);
+        if (layer < 2) {
+            std::tie(partial_wa_wl, node_grad, partial_hpwl, partial_cross_wl, partial_one_die_wl) =
+                wa_wirelength_hpwl::merged_forward_backward_with_hpwl(data.node_pos / data.site_width,
+                                                                      data.pin_id2node_id,
+                                                                      data.pin_rel_cpos / data.site_width,
+                                                                      data.node2pin_list,
+                                                                      data.node2pin_list_end,
+                                                                      data.hyperedge_list_cc[layer],
+                                                                      data.hyperedge_list_end_cc[layer],
+                                                                      data.net_mask,
+                                                                      gamma,
+                                                                      true);
+            node_grad *= data.site_width;
+            node_grad = node_grad.to(torch::kCPU);
+            torch::TensorAccessor<float, 2> node_grad_a = node_grad.accessor<float, 2>();
+            for (int i = 0; i < db.num_movable_nodes; i++) {
+                // db.init_x[i] = db.init_x[i] - node_grad_a[i][0] * step;
+                // db.init_x[i] = db.x[i] - node_grad_a[i][0] * step;
+            }
+        }
+        data.to(torch::kCPU);
 
-    std::vector<std::vector<AbacusCluster>> bin_clusters(num_bins_x * num_bins_y);
-    for (unsigned int i = 0; i < bin_cells.size(); ++i) {
-        bin_clusters[i].resize(bin_cells[i].size());
-    }
+        distributeMovableAndFixedCells2BinsCPU(db, bin_cells, num_bins_x, num_bins_y, bin_size_x, bin_size_y);//@@
 
-    abacusLegalizeRowCPU(db, bin_cells, bin_clusters, num_bins_x, num_bins_y, bin_size_x, bin_size_y);
-    // need to align nodes to sites
-    // this also considers cell width which is not integral times of site_width
-    for (auto const& cells : bin_cells) {
-        float xxl = db.xl;
-        for (auto node_id : cells) {
-            if (node_id < db.num_movable_nodes) {
-                db.x[node_id] = std::max(std::min(db.x[node_id], db.xh - db.node_size_x[node_id]), xxl);
-                db.x[node_id] = floor((db.x[node_id] - xxl) / db.site_width) * db.site_width + xxl;
-                xxl += ceil(db.node_size_x[node_id] / db.site_width) * db.site_width;
-            } else if (node_id < db.num_nodes) {
-                if (db.node_weight[node_id] == 0 || node_id >= db.num_movable_nodes) continue;  // FIXME
-                xxl = ceil((db.x[node_id] + db.node_size_x[node_id] - db.xl) / db.site_width) * db.site_width + db.xl;
+        std::vector<std::vector<AbacusCluster>> bin_clusters(num_bins_x * num_bins_y);
+        for (unsigned int i = 0; i < bin_cells.size(); ++i) {
+            bin_clusters[i].resize(bin_cells[i].size());
+        }
+
+        abacusLegalizeRowCPU(db, bin_cells, bin_clusters, num_bins_x, num_bins_y, bin_size_x, bin_size_y);
+        // need to align nodes to sites
+        // this also considers cell width which is not integral times of site_width
+        for (auto const& cells : bin_cells) {
+            float xxl = db.xl;
+            for (auto node_id : cells) {
+                if (node_id < db.num_movable_nodes) {
+                    db.x[node_id] = std::max(std::min(db.x[node_id], db.xh - db.node_size_x[node_id]), xxl);
+                    db.x[node_id] = floor((db.x[node_id] - xxl) / db.site_width) * db.site_width + xxl;
+                    xxl += ceil(db.node_size_x[node_id] / db.site_width) * db.site_width;
+                } else if (node_id < db.num_nodes) {
+                    if (db.node_weight[node_id] == 0 || node_id >= db.num_movable_nodes) continue;  // FIXME
+                    xxl = ceil((db.x[node_id] + db.node_size_x[node_id] - db.xl) / db.site_width) * db.site_width + db.xl;
+                }
             }
         }
     }
+    
 }
 }  // namespace dp

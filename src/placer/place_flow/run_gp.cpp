@@ -1,6 +1,20 @@
 #include "../run_placement.h"
+#include <cuda_runtime.h>
+#include <cuda.h>
 vector<int> mark_is_cut(torch::Tensor node_die, NodeData& data) {
+    // Assert input parameters are valid
+    assert(node_die.defined() && "node_die tensor is undefined");
+    assert(data.num_nets > 0 && "num_nets must be positive");
+    assert(data.num_nodes > 0 && "num_nodes must be positive");
+    assert(data.cell_mov_rhs >= 0 && data.cell_mov_rhs <= data.num_nodes && "cell_mov_rhs out of range");
+
     torch::Tensor net_cut_info = torch::zeros({data.num_nets, 2}, torch::dtype(torch::kInt));
+
+    // Assert tensors are properly defined before cloning
+    assert(data.pin_id2node_id.defined() && "pin_id2node_id tensor is undefined");
+    assert(data.hyperedge_list.defined() && "hyperedge_list tensor is undefined");
+    assert(data.hyperedge_list_end.defined() && "hyperedge_list_end tensor is undefined");
+
     auto pin_id2node_id_cpu = data.pin_id2node_id.clone().cpu();
     const torch::TensorAccessor<int64_t, 1> pin_id2node_id_at = pin_id2node_id_cpu.accessor<int64_t, 1>();
     auto hyperedge_list_cpu = data.hyperedge_list.clone().cpu();
@@ -45,7 +59,14 @@ vector<int> mark_is_cut(torch::Tensor node_die, NodeData& data) {
     }
     vector<int> mark_is_cut_vector;
     mark_is_cut_vector.resize(data.num_nets);
+
+    // Assert vector was resized properly
+    assert(mark_is_cut_vector.size() == data.num_nets && "mark_is_cut_vector resize failed");
+
     for (int i = 0; i != data.num_nets; i++) {
+        // Check bounds before accessing net_cut_info
+        assert(i < net_cut_info.size(0) && "net_cut_info index out of bounds");
+
         if ((torch::prod(net_cut_info[i], 0) != 0).item<int>()) {
             mark_is_cut_vector[i] = 1;
         }
@@ -105,6 +126,7 @@ torch::Tensor run_gp(NodeData& data,
     auto [mov_node_pos, mov_node_size, expand_ratio] =
         data.get_mov_node_info_cross_chip(is_init_macro, is_init_stdcell, move_macro);
     std::tie(mov_lhs, mov_rhs) = data.movable_index;
+    std::cout << "mov_lhs " << mov_lhs << " mov_rhs " << mov_rhs <<std::endl;
 
     torch::Tensor via_init_density_map =
         torch::zeros({data.num_bin_x, data.num_bin_y}, torch::dtype(data.node_size.dtype())).to(device);
@@ -150,6 +172,7 @@ torch::Tensor run_gp(NodeData& data,
     via_data.init_vars();  // TODO: equivalent to PlaceData::init_filler
     auto [via_mov_node_pos, via_mov_node_size, via_expand_ratio] = via_data.get_mov_node_info();
     std::tie(via_mov_lhs, via_mov_rhs) = via_data.movable_index;
+    std::cout << "via_mov_lhs " << via_mov_lhs << " via_mov_rhs " << via_mov_rhs <<std::endl;
 
     torch::Tensor mov_node_pos_all;
     torch::Tensor mov_node_size_all;
@@ -333,7 +356,7 @@ torch::Tensor run_gp(NodeData& data,
     /* Nesterov optimizer */
     auto optimizer = torch::optim::Nesterov({mov_node_pos_all}, torch::optim::NesterovOptions(0.0), obj_and_grad_fn);
 
-    init_params_multi_circuit(mov_node_pos_all,
+    init_params_multi_circuit(mov_node_pos_all, //@@
                               trunc_node_pos_fn,
                               mov_lhs,
                               mov_rhs,
@@ -356,6 +379,17 @@ torch::Tensor run_gp(NodeData& data,
 
     /* start gp iteration */
     if (true) {
+        // Synchronize CUDA and check for errors before evaluation
+        if (mov_node_pos_all.is_cuda()) {
+            cudaDeviceSynchronize();
+            cudaError_t cuda_err = cudaGetLastError();
+            if (cuda_err != cudaSuccess) {
+                std::cout << "CUDA error detected before evaluation: " << cudaGetErrorString(cuda_err) << std::endl;
+                std::cout << "This error may be from init_params_multi_circuit" << std::endl;
+                assert(false && "CUDA error before evaluation");
+            }
+        }
+
         auto [hpwls, overflows, tmp1] = evaluator_fn(mov_node_pos_all);
         logger.info(
             "iter: %d | masked_hpwl: %.2E overflow: (%.4f, %.4f, %.4f) "
@@ -406,6 +440,11 @@ torch::Tensor run_gp(NodeData& data,
         ////////////////////////////////////////////////////////////////////////////////
     vector<int> ocupied;
     vector<int> mark_is_cut_vector = mark_is_cut(data.node_die, data);
+
+    // Assert vector is properly initialized
+    assert(mark_is_cut_vector.size() == data.num_nets && "mark_is_cut_vector size mismatch with num_nets");
+    assert(!mark_is_cut_vector.empty() && "mark_is_cut_vector is empty");
+
     ocupied.resize(data.num_pins);
     int cnt_violate = 0;
     float total_region_x = 0;

@@ -24,14 +24,20 @@ void Database::load() {
         readBSAux(rawDBArgs.BookshelfAux, rawDBArgs.BookshelfPl);
     }
 
+
+    printlog(LOG_INFO, "load()!");
+
     if (rawDBArgs.LefFile != "") {
         rawDBArgs.Format = "lefdef";
         readLEF(rawDBArgs.LefFile);
+        printlog(LOG_INFO, "load()!1");
     } else if ((rawDBArgs.LefCell != "") && (rawDBArgs.LefTech != "")) {
         rawDBArgs.Format = "lefdef";
         readLEF(rawDBArgs.LefTech);
         readLEF(rawDBArgs.LefCell);
+        printlog(LOG_INFO, "load()!2");
     } else if (rawDBArgs.LefFiles.size() > 0) {
+        printlog(LOG_INFO, "load()!3");
         rawDBArgs.Format = "lefdef";
         for (auto lef : rawDBArgs.LefFiles) {
             readLEF(lef);
@@ -40,6 +46,7 @@ void Database::load() {
     }
 
     if (rawDBArgs.DefFile != "") {
+        printlog(LOG_INFO, "load()!4");
         rawDBArgs.Format = "lefdef";
         readDEF(rawDBArgs.DefFile);
         readDEFPG(rawDBArgs.DefFile);
@@ -47,10 +54,12 @@ void Database::load() {
     }
 
     if (rawDBArgs.Size != "") {
+        printlog(LOG_INFO, "load()!5");
         readSize(rawDBArgs.Size);
     }
 
     if (rawDBArgs.Constraints != "") {
+        printlog(LOG_INFO, "load()!6");
         readConstraints(rawDBArgs.Constraints);
     }
 
@@ -61,6 +70,7 @@ void Database::load() {
 
     // verilog is unused now
     if (rawDBArgs.Verilog != "") {
+        printlog(LOG_INFO, "load()!7");
         readVerilog(rawDBArgs.Verilog);
     }
 }

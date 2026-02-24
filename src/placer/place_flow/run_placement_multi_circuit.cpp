@@ -2,6 +2,14 @@
 #include "fp/fp/floorplan.h"
 #include "utils/myUtils.h"
 
+void replaceAll(std::string& str, const std::string& from, const std::string& to) {
+    size_t start_pos = 0;
+    while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
+        str.replace(start_pos, from.length(), to);
+        start_pos += to.length();
+    }
+}
+
 void run_placement_main_multi_circuit() {
     /* General settings */
     logger.info("#threads %d", st::setting.num_threads);
@@ -100,7 +108,7 @@ void run_placement_main_multi_circuit() {
 
         torch::Tensor partial_hpwl3d;
         Partitioner pt(data, hpwl_state);
-        if (false) {
+        if (true) {
             pt.run_patoh_area(data);
             std::string output_def = st::setting.output_path + "_partition_0.def";
             auto node_die_def = 1 - data.node_die.slice(0, data.cell_mov_lhs, data.cell_mov_rhs);
@@ -111,6 +119,35 @@ void run_placement_main_multi_circuit() {
             auto node_die_def2 = data.node_die.slice(0, data.cell_mov_lhs, data.cell_mov_rhs);
             std::vector<int> node_selected2(node_die_def2.data_ptr<int>(), node_die_def2.data_ptr<int>() + node_die_def2.size(0));
             rawdb->write_openroad_partition(st::setting.load_def_template, output_def, node_selected2);
+            
+            std::ofstream outFile;
+            std::string file_name = st::setting.output_path + "_name_mapper.txt";
+            outFile.open(file_name.c_str());
+            if (!outFile.good()) {
+                std::cerr << "can not open " << file_name << std::endl;
+                exit(1);
+            }else{
+                std::cout << "open! " << file_name << " net size " << rawdb->nets.size() << std::endl;
+            }
+            for(int i = 0; i < rawdb->nets.size(); i++)
+            {
+                std::string name_mapped = rawdb->nets[i]->name;
+                // if(rawdb->nets[i]->name.find("/") == std::string::npos)
+                // {
+                //     // logger.error("error when handling name %s\n", name_mapped.c_str());
+                //     // assert(0);
+                //     replaceAll(name_mapped, "\\[", "[");
+                //     replaceAll(name_mapped, "\\]", "]");
+                // }
+                // else{
+                //     replaceAll(name_mapped, "\\", "\\\\");
+                //     replaceAll(name_mapped, "[", "\\[");
+                //     replaceAll(name_mapped, "]", "\\]");
+                //     replaceAll(name_mapped, ".", "\\.");
+                //     replaceAll(name_mapped, "/", "\\/");
+                // }
+                outFile << "HBT[" << i << "] " << name_mapped << std::endl;
+            }
         }
         /* Partitioning */
         if (st::setting.pt) {
@@ -314,6 +351,7 @@ void run_placement_main_multi_circuit() {
             /* movable vias */
             logger.info("getting viadata");
             int magic_backup = st::setting.magic_hpwl;
+            std::cout << "node_die.sizes(): " << node_die.sizes() <<std::endl;
             via_data = ViaData(data, rawdb, node_die);
             logger.info("finish getting viadata");
             auto node_size_backup = data.node_size.clone();
@@ -346,7 +384,7 @@ void run_placement_main_multi_circuit() {
                             is_move_macro,
                             is_init_macro,
                             is_init_stdcell,
-                            "first");
+                            "first"); // for vias.
                             //   "first"+to_string(ii));  // third gp for gp3d mode
             auto data_size_check = data.node_size_bot * (1 - node_die).unsqueeze(1) + data.node_size_top * node_die.unsqueeze(1);
             via_data.dump(node_pos, data_size_check, data.node_die, cell_mov_lhs, cell_mov_rhs, data.node_orient_top);
@@ -417,7 +455,7 @@ void run_placement_main_multi_circuit() {
                 /* hpwl-driven fm */
                 if (true) {
                     // node_pos = pt.run_gp3d(data);
-                    logger.info("============== HPWL-FM round %d ==============", st::setting.round_recursion);
+                    logger.info("============== flag2 HPWL-FM round %d ==============", st::setting.round_recursion);
                     // data.reset();
                     data.node_pos = node_pos.slice(0, 0, node_pos_backup.size(0));
                     data.node_size = data.node_size.slice(0, 0, node_size_backup.size(0));
@@ -436,12 +474,12 @@ void run_placement_main_multi_circuit() {
                     data.pin_id2node_id = pin_id2node_id_backup;
                     pt.node_die = node_die.index({Slice(cell_mov_lhs, cell_mov_rhs)}).clone();
                     data.node_die = data.node_die.index({Slice(cell_mov_lhs, cell_mov_rhs)});
-                    pt.node_pos_2d_ground = node_pos.index({Slice(cell_mov_lhs, cell_mov_rhs), Slice(0, 2)});
-                    data.node_pos = node_pos.index({Slice(cell_mov_lhs, cell_mov_rhs), Slice(0, 2)});
+                    pt.node_pos_2d_ground = node_pos.index({Slice(cell_mov_lhs, cell_mov_rhs), Slice(0, 2)}).clone();
+                    data.node_pos = node_pos.index({Slice(cell_mov_lhs, cell_mov_rhs), Slice(0, 2)}).clone();
                     data.node_size = data.node_size_bot * (1 - pt.node_die).unsqueeze(1) +
                                      data.node_size_top * pt.node_die.unsqueeze(1);
 
-                    pt.run_fm_wl(data);
+                    pt.run_fm_wl(data, st::setting.skip_hpwl_fm);
                 }
 
                 node_die = pt.node_die.clone();
@@ -499,6 +537,9 @@ void run_placement_main_multi_circuit() {
             data.node_die = node_die.clone();
             data.mov_cell_areas = via_data.mov_cell_areas;
         }
+
+        auto [mov_lhs_with_via, mov_rhs_with_via] = data.movable_index;
+        data.node_pos = node_pos.index({Slice(mov_lhs_with_via, mov_rhs_with_via), Slice(0, 2)}).clone();
 
         // data.reset();
         via_data.postscale();
@@ -1009,6 +1050,7 @@ void run_placement_main_multi_circuit() {
         auto node_die_def2 = data.node_die.slice(0, data.cell_mov_lhs, data.cell_mov_rhs);
         std::vector<int> node_selected2(node_die_def2.data_ptr<int>(), node_die_def2.data_ptr<int>() + node_die_def2.size(0));
         rawdb->write_Openroad(st::setting.load_def_template, output_def, node_selected2);
+        //@@ can partition here. try to read the def files using innovus.
 
     #define EXTRACT(x, a, b, c)             \
         do {                                \

@@ -146,15 +146,34 @@ public:
         grad_mat = grad_mat * energy_grad_out;
         double grad_weight = -1.0;  // Gradient descent
         at::Tensor node_grad = normalize_node_info.new_zeros({num_nodes, 2});
+        
+        // std::cout << "node_grad mean flag0" << node_grad.mean(0) << endl;
 
         at::Tensor node_grad_4part = normalize_node_info.new_zeros({num_nodes, 4});
         at::Tensor macro_mask = st::setting.cache_macro_mask;
+        // std::cout << "before backward macro_mask.sizes()"<< macro_mask.sizes() << " node_grad.sizes() " << node_grad.sizes() << std::endl;
         node_grad = density_map_backward(
             normalize_node_info, grad_mat, mov_sorted_map, node_grad, node_grad_4part, macro_mask, grad_weight, num_bin_x, num_bin_y, num_nodes);
         
+        // std::cout << "end backward1 "<< std::endl;
+
+        // if (node_grad.defined()) {
+        //     std::cout << "node_grad is defined" << std::endl;
+        //     std::cout << "node_grad size: " << node_grad.sizes() << std::endl;
+        //     std::cout << "node_grad device: " << node_grad.device() << std::endl;
+        //     try {
+        //         std::cout << "node_grad mean: " << node_grad.mean(0) << std::endl;
+        //     } catch (const std::exception& e) {
+        //         std::cout << "Error calculating mean: " << e.what() << std::endl;
+        //     }
+        // } else {
+        //     std::cout << "node_grad is undefined!" << std::endl;
+        // }
 
         // st::setting.cache_density_grad_4part = node_grad_4part.cpu();//@@@
-        // cout << node_grad.mean(0) << endl;
+        // std::cout << "node_grad mean" << node_grad.mean(0) << endl;
+        
+
         // Use data saved in forward
         return {node_grad,
                 Variable(),
@@ -169,7 +188,10 @@ public:
                 Variable(),
                 Variable(),
                 Variable(),
-                Variable()};
+                Variable(),
+                Variable(),
+                Variable(),
+                Variable(),};
     }
 };  // END MODULE
 

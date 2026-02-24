@@ -422,6 +422,18 @@ torch::Tensor density_map_cuda_forward(torch::Tensor normalize_node_info,
             num_bin_y);
     }
 
+    {
+        cudaDeviceSynchronize();
+        auto t = cudaGetLastError();
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            printf("density_map_cuda_forward failed : %s\n", cudaGetErrorString(err));
+            AT_ERROR("CUDA error: ", cudaGetErrorString(err));
+            assert(0);
+            exit(0);
+        }
+    }
+
     return aux_mat;
 }  // END MODULE
 
@@ -507,6 +519,18 @@ torch::Tensor macro_density_map_cuda_forward(torch::Tensor normalize_node_info,
             num_bin_y);
     }
 
+    {
+        cudaDeviceSynchronize();
+        auto t = cudaGetLastError();
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            printf("macro_density_map_cuda_forward failed : %s\n", cudaGetErrorString(err));
+            AT_ERROR("CUDA error: ", cudaGetErrorString(err));
+            assert(0);
+            exit(0);
+        }
+    }
+
     return aux_mat;
 }  // END MODULE
 
@@ -525,6 +549,7 @@ __global__ void density_map_cuda_deterministic_backward_kernel(
     const int index = blockIdx.x * blockDim.x + threadIdx.x;
     if (index < num_nodes) {
         const int i = (sorted_node_map[index] >= 0) ? sorted_node_map[index] : index;
+        // printf("i = %d\n", i);
         const float weight = normalize_node_info[i][4];
         if (weight > 0) {
             const float x_l = normalize_node_info[i][0];
@@ -553,21 +578,21 @@ __global__ void density_map_cuda_deterministic_backward_kernel(
                     float grad_y = grad_mat[1 * num_bin_x * num_bin_y + j * num_bin_y + k] * overlap_area;
                     gradX += grad_x;
                     gradY += grad_y;
-                    if(macro_mask[i])
-                    {
-                        int mid_x = (x_lf + x_hf + 1) >> 1;
-                        int mid_y = (y_lf + y_hf + 1) >> 1;
-                        if(j<=mid_x){
-                            node_grad_4part[i][0]+=grad_x;
-                        }else{
-                            node_grad_4part[i][1]+=grad_x;
-                        }
-                        if(k<mid_y){
-                            node_grad_4part[i][2]+=grad_y;
-                        }else{
-                            node_grad_4part[i][3]+=grad_y;
-                        }
-                    }
+                    // if(macro_mask[i])
+                    // {
+                    //     int mid_x = (x_lf + x_hf + 1) >> 1;
+                    //     int mid_y = (y_lf + y_hf + 1) >> 1;
+                    //     // if(j<=mid_x){
+                    //     //     node_grad_4part[i][0]+=grad_x;
+                    //     // }else{
+                    //     //     node_grad_4part[i][1]+=grad_x;
+                    //     // }
+                    //     // if(k<mid_y){
+                    //     //     node_grad_4part[i][2]+=grad_y;
+                    //     // }else{
+                    //     //     node_grad_4part[i][3]+=grad_y;
+                    //     // }
+                    // }
                 }
             }
             node_grad[i][0] = grad_weight * weight * gradX;
@@ -589,10 +614,22 @@ torch::Tensor density_map_cuda_backward(torch::Tensor normalize_node_info,
                                         bool deterministic) {
     cudaSetDevice(normalize_node_info.get_device());
     auto stream = at::cuda::getCurrentCUDAStream();
-
+    {
+        cudaDeviceSynchronize();
+        auto t = cudaGetLastError();
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            printf("density_map_cuda_backward failed flag000: %s\n", cudaGetErrorString(err));
+            AT_ERROR("CUDA-1 error: ", cudaGetErrorString(err));
+            assert(0);
+            exit(0);
+        }
+    }
+    
     if (deterministic) {
         int threads = 64;
         int blocks = (num_nodes + threads - 1) / threads;
+        // std::cout << "flag1 " <<std::endl;
         density_map_cuda_deterministic_backward_kernel<<<blocks, threads, 0, stream>>>(
             normalize_node_info.packed_accessor32<float, 2, torch::RestrictPtrTraits>(),
             grad_mat.data_ptr<float>(),
@@ -604,11 +641,24 @@ torch::Tensor density_map_cuda_backward(torch::Tensor normalize_node_info,
             num_bin_x,
             num_bin_y,
             num_nodes);
+        {
+            cudaDeviceSynchronize();
+            auto t = cudaGetLastError();
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) {
+                printf("density_map_cuda_backward failed flag2: %s\n", cudaGetErrorString(err));
+                AT_ERROR("CUDA0 error: ", cudaGetErrorString(err));
+                assert(0);
+                exit(0);
+            }
+        }
+        // std::cout << "flag2 " <<std::endl;
     } else {
         int thread_count = 64;
         dim3 blockSize(2, 2, thread_count);
         int block_count = (num_nodes - 1 + thread_count) / thread_count;
         size_t shared_mem_size = sizeof(float) * thread_count * 2;
+        std::cout << "flag3 " <<std::endl;
         density_map_cuda_backward_kernel<<<block_count, blockSize, shared_mem_size, stream>>>(
             normalize_node_info.packed_accessor32<float, 2, torch::RestrictPtrTraits>(),
             grad_mat.data_ptr<float>(),
@@ -618,6 +668,30 @@ torch::Tensor density_map_cuda_backward(torch::Tensor normalize_node_info,
             num_bin_x,
             num_bin_y,
             num_nodes);
+        {
+            cudaDeviceSynchronize();
+            auto t = cudaGetLastError();
+            cudaError_t err = cudaGetLastError();
+            if (err != cudaSuccess) {
+                printf("density_map_cuda_backward failed flag4: %s\n", cudaGetErrorString(err));
+                AT_ERROR("CUDA2 error: ", cudaGetErrorString(err));
+                assert(0);
+                exit(0);
+            }
+        }
+        std::cout << "flag4 " <<std::endl;
+    }
+
+    {
+        cudaDeviceSynchronize();
+        auto t = cudaGetLastError();
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            printf("density_map_cuda_backward failed : %s\n", cudaGetErrorString(err));
+            AT_ERROR("CUDA3 error: ", cudaGetErrorString(err));
+            assert(0);
+            exit(0);
+        }
     }
 
     return node_grad;
@@ -768,6 +842,18 @@ torch::Tensor density_map_cuda_forward_naive(torch::Tensor node_pos,
             clamp_node);
     }
 
+    {
+        cudaDeviceSynchronize();
+        auto t = cudaGetLastError();
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            printf("density_map_cuda_forward_naive failed : %s\n", cudaGetErrorString(err));
+            AT_ERROR("CUDA error: ", cudaGetErrorString(err));
+            assert(0);
+            exit(0);
+        }
+    }
+
     return aux_mat;
 }  // END MODULE
 
@@ -798,6 +884,18 @@ torch::Tensor density_map_cuda_normalize_node(torch::Tensor node_pos,
         num_bin_x,
         num_bin_y,
         num_nodes);
+    
+    {
+        cudaDeviceSynchronize();
+        auto t = cudaGetLastError();
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            printf("density_map_cuda_normalize_node failed : %s\n", cudaGetErrorString(err));
+            AT_ERROR("CUDA error: ", cudaGetErrorString(err));
+            assert(0);
+            exit(0);
+        }
+    }
 
     return normalize_node_info;
 }  // END MODULE
@@ -876,7 +974,17 @@ torch::Tensor density_backward_cuda(torch::Tensor normalize_node_info,
                                   num_bin_x,
                                   num_bin_y);
                           }));
-
+    {
+        cudaDeviceSynchronize();
+        auto t = cudaGetLastError();
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            printf("density_backward_cuda failed : %s\n", cudaGetErrorString(err));
+            AT_ERROR("CUDA error: ", cudaGetErrorString(err));
+            assert(0);
+            exit(0);
+        }
+    }
     return node_grad;
 }
 
@@ -928,6 +1036,16 @@ torch::Tensor apply_kernel_cuda(torch::Tensor density_map,
                                   num_bin_y,
                                   kernelWidth);
                           }));
-
+    {
+        cudaDeviceSynchronize();
+        auto t = cudaGetLastError();
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            printf("apply_kernel_cuda failed : %s\n", cudaGetErrorString(err));
+            AT_ERROR("CUDA error: ", cudaGetErrorString(err));
+            assert(0);
+            exit(0);
+        }
+    }
     return aux_mat;
 }

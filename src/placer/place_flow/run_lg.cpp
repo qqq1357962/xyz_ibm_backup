@@ -40,7 +40,7 @@ torch::Tensor run_lg(NodeData& data, ViaData& via_data, torch::Tensor node_pos, 
                         (via_data.bondingInfo[0] + via_data.bondingInfo[2]).item<float>();
 
             dp::greedyLegalizationV2(lg_db, 1, 64);
-            dp::abacusLegalizationV2(lg_db, 1, 64);
+            dp::abacusLegalizationV2(data, lg_db, 1, 64, 2, 1);
             lg_db_at.update_node_pos(node_pos_lg);
 
             node_pos = node_pos_lg;
@@ -68,6 +68,7 @@ torch::Tensor run_lg(NodeData& data, ViaData& via_data, torch::Tensor node_pos, 
                       hpwl_ovhd.item<float>());
     }
 
+    data.node_pos = node_pos.index({Slice(mov_lhs, mov_rhs), Slice(0, 2)}).clone();
     torch::Tensor node_pos_lg = node_pos;
     torch::Tensor node_size_lg = data.node_size.clone().to(torch::kCPU);
     node_size_lg.index({Slice(cell_mov_rhs, None)}) -= data.bondingInfo[2].to(torch::kCPU);  // FIXME: w+space -> w
@@ -86,7 +87,7 @@ torch::Tensor run_lg(NodeData& data, ViaData& via_data, torch::Tensor node_pos, 
 
                 lg_db_at.update_node_weight(node_weight);
                 dp::legalizationV2(data, lg_db_at, node_pos_lg, data.numRows[i].item<int>(),
-                                data.rowHeights[i].item<float>(), 0, 1, 64,cell_mov_lhs, cell_mov_rhs, only_macro);
+                                data.rowHeights[i].item<float>(), 0, 1, 64,cell_mov_lhs, cell_mov_rhs, i, only_macro);
                 auto [hpwl1, hpwl2, tmp] = evaluate_wl_cross_chip(node_pos_lg.to(data.device), data.node_die.to(data.device), data);
                 logger.info("After Greedy-Abacus LG, solution eval, exact HPWL (bot, top, total): (%.2f, %.2f, %.2f)",
                             hpwl1.item<float>(),

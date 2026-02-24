@@ -221,7 +221,7 @@ void run_placement_main_nesterov() {
         dp::DetailedPlaceDataTensor lg_db_at(data, node_pos_lg, node_size_lg);
 
         lg_db_at.update_node_weight(node_weight);
-        dp::legalizationV2(data, lg_db_at, node_pos_lg, data.numRows.item<int>(), data.rowHeights.item<float>(), 0, 1, 64,0,0);
+        dp::legalizationV2(data, lg_db_at, node_pos_lg, data.numRows.item<int>(), data.rowHeights.item<float>(), 0, 1, 64, 0, 0, 0);
 
         if (true) {
             auto info = make_tuple(-1, 0, data.design_name + "_LG_");

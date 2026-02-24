@@ -63,6 +63,36 @@ public:
         int macro_num = macro_mask.sum().item<int>();
         ctx->saved_data["macro_num"] = macro_num;
         auto node_rotate_grad2 = node_rotate_grad.clone();
+        // if (calc_overflow) {
+        //     at::Tensor aux_mat = init_density_map.clone();
+        //     at::Tensor mov_density_map = density_map_forward(normalize_node_info.index({Slice(mov_lhs, mov_rhs)}),
+        //                                                      mov_conn_sorted_map,
+        //                                                      aux_mat,
+        //                                                      num_bin_x,
+        //                                                      num_bin_y,
+        //                                                      mov_rhs - mov_lhs);
+        //     overflow = overflow_fn(mov_density_map);
+        //     at::Tensor aux_mat2 = torch::zeros_like(init_density_map);
+        //     at::Tensor filler_density_map;
+        //     // FIXME: is not None -> .numel()
+        //     if (filler_sorted_map.numel()) {
+        //         filler_density_map = density_map_forward(normalize_node_info.index({Slice(mov_rhs)}),
+        //                                                  filler_sorted_map,
+        //                                                  aux_mat2,
+        //                                                  num_bin_x,
+        //                                                  num_bin_y,
+        //                                                  num_nodes - (mov_rhs - mov_lhs));
+        //         density_map = mov_density_map + filler_density_map;
+        //     } else {
+        //         density_map = mov_density_map;
+        //     }
+
+        // } else {
+        //     overflow = node_size.new_empty(0);
+        //     at::Tensor aux_mat = init_density_map.clone();
+        //     density_map =
+        //         density_map_forward(normalize_node_info, mov_sorted_map, aux_mat, num_bin_x, num_bin_y, num_nodes);
+        // }
         if (calc_overflow) {
             // at::Tensor aux_mat = init_density_map.clone();
             // at::Tensor mov_density_map = density_map_forward(normalize_node_info,

@@ -2,6 +2,7 @@
 
 #include "detailed_place_db.h"
 #include "global.h"
+#include "core/core.h"
 
 namespace dp {
 
@@ -21,5 +22,5 @@ struct AbacusCluster {
     bool valid() const { return prev_cluster_id != INT_MIN && next_cluster_id != INT_MIN; }
 };
 
-void abacusLegalizationV2(DetailedPlaceData& db, int num_bins_x, int num_bins_y);
+void abacusLegalizationV2(NodeData& data, DetailedPlaceData& db, int num_bins_x, int num_bins_y, int layer, float step);
 }  // namespace dp

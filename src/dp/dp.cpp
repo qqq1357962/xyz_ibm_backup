@@ -45,6 +45,7 @@ void legalizationV2(NodeData& data,
                     int num_bins_y,
                     int cell_mov_lhs, 
                     int cell_mov_rhs,
+                    int layer,
                     bool only_macro) {
     logger.info("row_height: %f", row_height);
     DetailedPlaceData dp_db(data, lg_db_at, num_sites_y, row_height);
@@ -84,7 +85,12 @@ void legalizationV2(NodeData& data,
     if(!only_macro)
     {
         greedyLegalizationV2(dp_db, num_bins_x, num_bins_y);
-        abacusLegalizationV2(dp_db, num_bins_x, num_bins_y);
+        float step = 1;
+        for (int i = 0; i < 10; i++) {
+            lg_db_at.update_node_pos(data.node_pos);
+            abacusLegalizationV2(data, dp_db, num_bins_x, num_bins_y, layer, step);
+            step*=0.5;
+        }
     }else{
         logger.info("only legalize macros, skip std cell legalization!");
     }
@@ -117,33 +123,33 @@ void detail_placement(NodeData& data,
 
     legalityCheck_main(dp_db);
 
-    independentSetMatching(dp_db, num_bins_x, num_bins_y);
-    dp_db_at.update_node_pos(node_pos_dp);
-    std::tie(hpwl1, hpwl2, tmp) = evaluate_wl_cross_chip(node_pos_dp.to(data.device), data.node_die.to(data.device), data);
-    logger.info("After Independent Set Matching, solution eval, exact HPWL (bot, top, total): (%.2f, %.2f, %.2f)",
-                hpwl1.item<float>(),
-                hpwl2.item<float>(),
-                (hpwl1 + hpwl2).item<float>());
+    // independentSetMatching(dp_db, num_bins_x, num_bins_y);
+    // dp_db_at.update_node_pos(node_pos_dp);
+    // std::tie(hpwl1, hpwl2, tmp) = evaluate_wl_cross_chip(node_pos_dp.to(data.device), data.node_die.to(data.device), data);
+    // logger.info("After Independent Set Matching, solution eval, exact HPWL (bot, top, total): (%.2f, %.2f, %.2f)",
+    //             hpwl1.item<float>(),
+    //             hpwl2.item<float>(),
+    //             (hpwl1 + hpwl2).item<float>());
 
-    legalityCheck_main(dp_db);
+    // legalityCheck_main(dp_db);
 
-    globalSwap(dp_db, num_bins_x / 2, num_bins_y / 2, 2, 32);
-    dp_db_at.update_node_pos(node_pos_dp);
-    std::tie(hpwl1, hpwl2, tmp) = evaluate_wl_cross_chip(node_pos_dp.to(data.device), data.node_die.to(data.device), data);
-    logger.info("After Global Swap, solution eval, exact HPWL (bot, top, total): (%.2f, %.2f, %.2f)",
-                hpwl1.item<float>(),
-                hpwl2.item<float>(),
-                (hpwl1 + hpwl2).item<float>());
+    // globalSwap(dp_db, num_bins_x / 2, num_bins_y / 2, 2, 32);
+    // dp_db_at.update_node_pos(node_pos_dp);
+    // std::tie(hpwl1, hpwl2, tmp) = evaluate_wl_cross_chip(node_pos_dp.to(data.device), data.node_die.to(data.device), data);
+    // logger.info("After Global Swap, solution eval, exact HPWL (bot, top, total): (%.2f, %.2f, %.2f)",
+    //             hpwl1.item<float>(),
+    //             hpwl2.item<float>(),
+    //             (hpwl1 + hpwl2).item<float>());
 
-    legalityCheck_main(dp_db);
+    // legalityCheck_main(dp_db);
 
-    kReorder(dp_db, num_bins_x, num_bins_y);
-    dp_db_at.update_node_pos(node_pos_dp);
-    std::tie(hpwl1, hpwl2, tmp) = evaluate_wl_cross_chip(node_pos_dp.to(data.device), data.node_die.to(data.device), data);
-    logger.info("After 2nd K-Reorder, solution eval, exact HPWL (bot, top, total): (%.2f, %.2f, %.2f)",
-                hpwl1.item<float>(),
-                hpwl2.item<float>(),
-                (hpwl1 + hpwl2).item<float>());
+    // kReorder(dp_db, num_bins_x, num_bins_y);
+    // dp_db_at.update_node_pos(node_pos_dp);
+    // std::tie(hpwl1, hpwl2, tmp) = evaluate_wl_cross_chip(node_pos_dp.to(data.device), data.node_die.to(data.device), data);
+    // logger.info("After 2nd K-Reorder, solution eval, exact HPWL (bot, top, total): (%.2f, %.2f, %.2f)",
+    //             hpwl1.item<float>(),
+    //             hpwl2.item<float>(),
+    //             (hpwl1 + hpwl2).item<float>());
 }
 
 }  // namespace dp

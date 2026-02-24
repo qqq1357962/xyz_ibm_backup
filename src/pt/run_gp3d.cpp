@@ -383,7 +383,14 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeDat
             }
             if (true) {
                 grad.index({torch::indexing::Slice(data.cell_mov_rhs + static_cast<int>(data.__num_fillers__ * st::setting.die_diff / 2), data.cell_mov_rhs + static_cast<int>(data.__num_fillers__ * (1 - st::setting.die_diff / 2))), torch::indexing::Slice(2, 3)}) = 0.0;
-                grad.index({torch::indexing::Slice(data.iopin_mov_lhs, data.iopin_mov_rhs), torch::indexing::Slice(0, 2)}) = 0.0;
+                grad.index({torch::indexing::Slice(data.iopin_mov_lhs, data.iopin_mov_rhs), torch::indexing::Slice(0, 3)}) = 0.0;
+                // int num_nodes = Myreg_mask.size(0);
+                // auto mask_expanded = Myreg_mask.unsqueeze(1).expand({num_nodes, grad.size(1)});
+                // grad.slice(0, 0, num_nodes) = grad.slice(0, 0, num_nodes) * (1.0 - mask_expanded);
+                auto register_indices = torch::nonzero(data.Myreg_mask).squeeze();
+                if (register_indices.numel() > 0) {
+                    grad.index_put_({register_indices, 2}, 0.0);
+                }
             }
             if (!st::setting.skip_patoh) {
                 grad.index({torch::indexing::Slice(data.cell_mov_lhs, data.cell_mov_rhs), torch::indexing::Slice(2, 3)}) = 0.0;
@@ -503,7 +510,7 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeDat
             node_size_top,
             data,
             info2);
-        auto info3 = make_tuple(st::setting.round_recursion, iteration, data.design_name + "_3D_2");
+        auto info3 = make_tuple(st::setting.round_recursion, iteration, data.design_name + "_3D_2_1");
         auto node_pos_draw_cp =
             torch::cat({true_node_pos,
                         true_node_pos},
@@ -524,6 +531,7 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeDat
     float mid_z = (data.die_info[5].item<float>() + data.die_info[4].item<float>()) / 2;
 
     for (iteration = 1; iteration < st::setting.inner_iter_gp3d && init_lr > 0 && !st::setting.skip_gp3d; iteration++) {
+    // for (iteration = 1; iteration < 10 && init_lr > 0 && !st::setting.skip_gp3d; iteration++) {
         torch::Tensor obj = optimizer.step();
         conn_fix_node_pos = data.node_pos.index({Slice(data.iopin_mov_lhs, data.iopin_mov_rhs), "..."}) * min((1 - step_ovfl) * 1.4, static_cast<double>(1)) + init_fix_node_pos * max(1 - (1 - step_ovfl) * 1.4, static_cast<double>(0));
         conn_fix_node_pos = conn_fix_node_pos.detach();
@@ -627,6 +635,38 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeDat
             auto slicer = data.die_info[dir * 2 + 1].to(torch::kCPU) * 0.5;          // FIXME:
             auto parter = (node_pos_channel > slicer);
             auto node_die = torch::_cast_Int(parter);
+            // node_die.index({torch::indexing::Slice(data.iopin_mov_lhs, data.iopin_mov_rhs)}) = 1;
+            node_die.index_put_({Slice(data.iopin_mov_lhs, data.iopin_mov_rhs)}, 1);
+            // if (data.Myreg_mask.defined() && data.Myreg_mask.numel() > 0) {
+            //     auto register_indices = torch::nonzero(data.Myreg_mask).squeeze();
+            //     if (register_indices.numel() > 0) {
+            //         node_die.index_put_({register_indices}, 1);
+            //     }
+            // }
+            if (data.Myreg_mask.defined() && data.Myreg_mask.any().item<bool>()) {
+                // node_die.masked_fill_(data.Myreg_mask.to(torch::kBool), 1);
+                // int64_t num_cells = data.Myreg_mask.size(0);
+                // node_die.index({Slice(0, num_cells)}).masked_fill_(data.Myreg_mask.to(node_die.device).to(torch::kBool), 1);
+                int64_t num_cells = data.Myreg_mask.size(0);
+                auto mask_bool = data.Myreg_mask.to(node_die.device(), torch::kBool);
+                node_die.index({Slice(0, num_cells)}).masked_fill_(mask_bool, 1);
+            }
+            ////////////////
+            auto node_die_cpu = node_die.to(torch::kCPU);
+            auto mask_cpu = data.Myreg_mask.to(torch::kCPU).to(torch::kBool);
+            
+            auto node_die_a = node_die_cpu.accessor<int, 1>();
+            auto mask_a = mask_cpu.accessor<bool, 1>();
+            
+            for (int64_t i = 0; i < mask_a.size(0); ++i) {
+                if (mask_a[i]) {
+                    assert(node_die_a[i] == 1 && "Validation failed: node_die at mask index should be 1");
+                }
+            }
+            ///////////////
+            // grad.index_put_({torch::indexing::Slice(data.iopin_mov_lhs, data.iopin_mov_rhs)}, torch::ones_like(grad.index({torch::indexing::Slice(data.iopin_mov_lhs, data.iopin_mov_rhs)})));
+            // put all pins to the top.
+            // node_die.slice
 
             // auto [hpwl1, hpwl2, hpwl_ovlp] = evaluate_wl_cross_chip(node_pos.to(device), node_die.to(device), data);
             // logger.info("bot: %f, top: %f, overlap: %f", 
@@ -653,7 +693,7 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeDat
                         node_size_top,
                         data,
                         info2);
-                    auto info3 = make_tuple(st::setting.round_recursion, iteration, data.design_name + "_3D_2");
+                    auto info3 = make_tuple(st::setting.round_recursion, iteration, data.design_name + "_3D_2_2");
                     auto node_pos_draw_cp =
                         torch::cat({true_node_pos,
                                     true_node_pos},
@@ -673,6 +713,7 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeDat
             auto parter = (node_pos_channel > slicer);
             // auto nos = torch::_cast_Int(parter)
             auto node_die = torch::_cast_Int(parter);
+            node_die.index_put_({Slice(data.iopin_mov_lhs, data.iopin_mov_rhs)}, 1);
             if (true) {
                 auto true_node_pos = mov_node_pos.index({Slice(data.cell_mov_lhs, data.cell_mov_rhs), Slice(0, 2)}).to(torch::kCPU);
                 auto node_shift = (data.__die_shift__.index({Slice(0, 2)}) / data.__die_scale__.index({Slice(0, 2)})).expand_as(true_node_pos).to(torch::kCPU);
@@ -692,7 +733,7 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeDat
                     node_size_top,
                     data,
                     info2);
-                auto info3 = make_tuple(st::setting.round_recursion, iteration, data.design_name + "_3D_2");
+                auto info3 = make_tuple(st::setting.round_recursion, iteration, data.design_name + "_3D_2_3");
                 auto node_pos_draw_cp =
                     torch::cat({true_node_pos,
                                 true_node_pos},
@@ -756,6 +797,7 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeDat
 
     auto parter = (node_pos_channel > slicer);
     node_die = torch::_cast_Int(parter);
+    node_die.index_put_({Slice(data.iopin_mov_lhs, data.iopin_mov_rhs)}, 1);
 
     /* legalize partition */
     mov_cell_areas = torch::zeros(2, torch::dtype(torch::kLong));
@@ -839,7 +881,7 @@ tuple<torch::Tensor, torch::Tensor, torch::Tensor> Partitioner::run_gp3d(NodeDat
     node_pos_2d_ground = node_pos.index({Slice(data_2d.cell_mov_lhs, data_2d.cell_mov_rhs), Slice(0, 2)});
     /* hpwl-driven fm */
     if (st::setting.round_recursion) {
-        logger.info("============== HPWL-FM round %d ==============", st::setting.round_recursion);
+        logger.info("============== flag1 HPWL-FM round %d ==============", st::setting.round_recursion);
         data_2d.node_pos = node_pos.index({Slice(data_2d.cell_mov_lhs, data_2d.cell_mov_rhs), "..."});
         data_2d.node_die = data_2d.node_die.index({Slice(data_2d.cell_mov_lhs, data_2d.cell_mov_rhs)});
         data_2d.reset_net_node();

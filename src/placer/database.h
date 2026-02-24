@@ -224,6 +224,7 @@ public:
         to(bondingInfo, device_);
 
         macro_mask = macro_mask.to(device_);
+        Myreg_mask = Myreg_mask.to(device_);
         pin_rel_cpos = pin_rel_cpos.to(device_);
         pin_id2node_id = pin_id2node_id.to(device_);
         node2pin_list = node2pin_list.to(device_);
@@ -345,6 +346,7 @@ public:
 public:
     /* iccad2022 */
     torch::Tensor macro_mask;
+    torch::Tensor Myreg_mask;
     int numTechlibs;
     torch::Tensor maxUtilM;
     torch::Tensor rowHeights;
