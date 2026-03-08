@@ -217,9 +217,14 @@ Dict GlobalParser::preprocess_design_info(shared_ptr<gp::GPDatabase> gpdb) {
     const tuple<int, int> site_info = make_tuple(double(siteWidth), double(siteHeight));
     int bondingSizeX = st::setting.bondingSizeX == 0 ? siteWidth * 4 : st::setting.bondingSizeX;
     int bondingSizeY = st::setting.bondingSizeY == 0 ? siteHeight : st::setting.bondingSizeY;
+    // bondingSizeX*=8;
+    // bondingSizeY*=8;
+    bondingSizeX = siteHeight;
+    bondingSizeY = siteHeight;
     std::cout << " in parser, set bondingSizeX " << bondingSizeX << " bondingSizeY " << bondingSizeY << std::endl;
     std::cout << " in parser, set bondingSpace " << st::setting.bondingSpace << "siteWidth" << siteWidth << " siteHeight " << siteHeight << std::endl;
     int bondingSpace = st::setting.bondingSpace;
+    bondingSpace = 2000 - bondingSizeX;
     gpdb->bondingSizeX = bondingSizeX;
     gpdb->bondingSizeY = bondingSizeY;
     torch::Tensor bondingInfo = torch::tensor({bondingSizeX, bondingSizeY, bondingSpace}, torch::dtype(torch::kFloat32));

@@ -39,7 +39,8 @@ NodeData3D::NodeData3D(NodeData& data) {
     __ori_die_ly__ = die_info[2].item<int>();
     __ori_die_hy__ = die_info[3].item<int>();
     __ori_die_lz__ = 0;  // TODO:
-    __ori_die_hz__ = (__ori_die_hx__ + __ori_die_hy__) / 25;
+    // __ori_die_hz__ = (__ori_die_hx__ + __ori_die_hy__) / 25;
+    __ori_die_hz__ = (__ori_die_hx__ + __ori_die_hy__) / 2;
     // if(st::setting.mode==4)
     // {
     //     __ori_die_hz__ = (__ori_die_hx__ + __ori_die_hy__) / 20;
